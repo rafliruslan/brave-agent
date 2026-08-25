@@ -12,7 +12,7 @@ export const DEFAULT_STATE_PATH = join(
 );
 
 /**
- * Claude Code accepts `--session-id <uuid>`, so unlike Aside we do not have to
+ * Claude Code accepts `--session-id <uuid>`, so we do not have to
  * discover an id after the fact by diffing session directories. The id is a
  * pure function of the Slack thread, which means a lost or corrupt store costs
  * nothing: the same thread deterministically resolves to the same session.

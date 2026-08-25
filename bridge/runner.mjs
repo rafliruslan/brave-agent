@@ -2,11 +2,11 @@
  * Runs one the agent turn against Claude Code.
  *
  * This is the module that replaced the macOS-only `runner.mjs`, which shelled
- * out to `aside exec`. Everything else in the bridge is unchanged from the Mac.
+ * out to a macOS-only agent CLI. Everything else in the bridge is unchanged.
  *
- * Four Aside findings drove the original design (see probe-notes.md). Three of
+ * Four findings drove the original design against that CLI. Three of
  * them do not survive the move, because Claude Code has a structured interface
- * that Aside's CLI did not:
+ * that Claude Code has and it did not:
  *
  *   F1 session id is undiscoverable  -> gone. `--session-id <uuid>` assigns it.
  *   F2 exits 0 on hard errors        -> gone. JSON carries `is_error`/`subtype`.
@@ -16,7 +16,7 @@
  *      that never reaches EOF. Measured on the Mac: hung >35s vs 779ms with
  *      stdin ignored. No mocked-spawn unit test can catch this.
  *
- * Also measured here, and contrary to ASIDE-INTERNALS section 5: a headless
+ * Also measured, and contrary to what the previous harness did: a headless
  * Claude Code run that hits a permission boundary does NOT hang. It records the
  * refusal in `permission_denials`, tells the user plainly, and exits success in
  * ~12s. That is why this runner uses a real permission mode and a scoped cwd
@@ -30,7 +30,7 @@ export const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 
 /**
  * Claude Code says this when a `--resume` target is gone. The Mac hit the same
- * class of failure constantly: Aside evicted 442 session directories against
+ * class of failure constantly: the old harness evicted 442 session directories against
  * 152 registered rows. Detect, forget, retry fresh, never show the user.
  */
 const DEAD_SESSION = /no conversation found|session .*not found|could not (find|resume)/i;
@@ -38,8 +38,8 @@ const DEAD_SESSION = /no conversation found|session .*not found|could not (find|
 /**
  * Tools the agent must never get, enforced in code rather than in the persona.
  *
- * The Mac's hardest-won lesson: the persona asked her not to spawn subagents
- * and she did it anyway, often enough to matter. Every rule that CAN be made
+ * The hardest-won lesson: the persona asked the agent not to spawn subagents
+ * and it did so anyway, often enough to matter. Every rule that CAN be made
  * deterministic MUST be, which is also what let the persona shrink 82%.
  *
  * `Task`                            one Slack message must be one session, or a
@@ -50,7 +50,7 @@ const DEAD_SESSION = /no conversation found|session .*not found|could not (find|
  *                                   Observed 2026-08-25: `browser_click` cannot
  *                                   work on Google Calendar (the ref resolves
  *                                   but Playwright's stability check never
- *                                   passes), she escalated to raw JS against a
+ *                                   passes), the agent escalated to raw JS against a
  *                                   half-open dialog, and left a ghost "No
  *                                   title" out-of-office event that then had to
  *                                   be hunted down. `browser_evaluate` against a
@@ -82,10 +82,10 @@ function buildArgs({ prompt, sessionId, isNew, model, effort, permissionMode, mc
   // model for one turn and drop back afterwards without starting over.
   if (effort) args.push('--effort', effort);
   if (permissionMode) args.push('--permission-mode', permissionMode);
-  // `--strict-mcp-config` is what stops her seeing tools she cannot use.
-  // Without it she inherits every user-scope MCP server from ~/.claude.json
+  // `--strict-mcp-config` is what stops the agent seeing tools she cannot use.
+  // Without it the agent inherits every user-scope MCP server from ~/.claude.json
   // (Gmail, Calendar, Drive, Excalidraw, Linear, Slack...), which ALLOWED_TOOLS
-  // then denies. Observed twice in real threads: she picked the Calendar tool,
+  // then denies. Observed twice in real threads: the agent picked the Calendar tool,
   // was refused, and reported "needs permission" while Google Calendar sat open
   // and logged in one tab away. A tool that is visible but denied is worse than
   // one that does not exist, because it stops her before she tries the browser.

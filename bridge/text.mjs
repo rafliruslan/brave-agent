@@ -5,8 +5,8 @@ const TRUNCATION_MARKER = '\n… (truncated)';
 /**
  * The browser is not reachable, as opposed to the request being bad.
  *
- * Rewritten for Brave-over-CDP. The Mac list watched for Aside's own daemon
- * ("aside is not running", "extension not connected"); those strings can never
+ * Rewritten for Brave-over-CDP. An earlier list watched for a different daemon
+ * ("... is not running", "extension not connected"); those strings can never
  * appear on Linux, and leaving them would have meant a real CDP outage fell
  * through to the generic failure text instead of a message that says what to do.
  */
@@ -32,7 +32,7 @@ const DEAD_SESSION_HINTS = [
 ];
 
 /**
- * Aside evicts old sessions from its registry (`state.db`) while leaving the
+ * A harness can evict old sessions from its registry while leaving the
  * log directory on disk: measured at 442 directories against 152 registered.
  * Resuming an evicted id fails, and it will fail forever, so the thread has to
  * be released and the work retried in a fresh session.
@@ -89,7 +89,7 @@ export function truncateOutput(text, limit = MAX_OUTPUT) {
 /**
  * Normalise Markdown habits into Slack mrkdwn.
  *
- * The persona asks her to write Slack mrkdwn, and she mostly does, but "mostly"
+ * The persona can ask for Slack mrkdwn, and the agent mostly complies, but "mostly"
  * is not good enough for something that renders as visible garbage. Observed in
  * a live thread: `**bold**` came through as literal asterisks and a Markdown
  * image tag pointed at a local file path. This runs on every reply so the
@@ -141,7 +141,7 @@ export function toSlackText(text) {
     return inner.replace(/\b([a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,})\b/gi, '`$1`');
   });
 
-  // Em dashes are banned in all of the user's writing, and she still reaches for
+  // Em dashes may be banned in the user's writing, and the agent still reaches for
   // them. A dash between two numbers is a range and becomes a hyphen; anywhere
   // else it is doing the job of a comma, so it becomes one.
   out = out.replace(/(\d)\s*[—–]\s*(\d)/g, '$1-$2');
@@ -154,23 +154,23 @@ export function toSlackText(text) {
 /**
  * Turn a runner result into the message body posted back to Slack.
  *
- * Failure text can arrive in either stream: the Aside CLI prints its own
+ * Failure text can arrive in either stream: an agent CLI may print its own
  * errors to stdout while exiting 0 (see docs/probe-notes.md), so both fields
  * are consulted rather than assuming stderr carries the diagnosis.
  */
 export function formatResult(result) {
   if (result.timedOut) {
-    // She keeps working after the CLI is killed, so this is "not back yet"
-    // rather than "failed". The text below is whatever she had said by then.
+    // Work may continue after the CLI is killed, so this is "not back yet"
+    // rather than "failed". The text below is whatever was said by then.
     const partial = truncateOutput(toSlackText(result.output));
-    const head = '⏱ Ran past the time limit. She may still be finishing in Aside.';
+    const head = '⏱ Ran past the time limit. It may still be finishing in the browser.';
     return partial ? `${head}\n\n${partial}` : head;
   }
 
   if (!result.ok) {
     const blob = `${result.error} ${result.output}`.toLowerCase();
     if (NOT_RUNNING_HINTS.some((hint) => blob.includes(hint))) {
-      return "Brave isn't running, Captain, so I have no browser to work in. Open it and ask me again. 💗";
+      return "Brave isn't running, so there is no browser to work in. Open it and ask again.";
     }
     if (NETWORK_HINTS.some((hint) => blob.includes(hint))) {
       return '🌐 Lost the network mid-run, so that one died before it finished. Ask me again.';

@@ -2,12 +2,12 @@
  * Keyed work queue: strict ordering within a key, bounded parallelism across keys.
  *
  * The key is a Slack thread. Two mentions in the same thread must never run at
- * once, because both would resume the same Aside session and interleave turns
+ * once, because both would resume the same session and interleave turns
  * into one conversation history. Different threads are independent and may run
  * together, up to `concurrency`.
  *
  * The cap exists for cost and memory, not correctness: measured, concurrent
- * `aside exec` runs each open their own browser tabs and do not interfere.
+ * agent runs each open their own browser tabs and do not interfere.
  */
 export function createQueue({ concurrency = 1 } = {}) {
   let active = 0;

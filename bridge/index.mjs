@@ -1,20 +1,17 @@
 /**
- * the agent's Slack bridge, Linux edition.
+ * Slack Socket Mode bridge.
  *
- * Written fresh against `runner.mjs`, as the handoff instructed. Every other
- * module in this directory came from the Mac and is unchanged except for two
- * XDG path swaps and the session-id source.
+ * Mentions arrive here, become one Claude Code session per thread, and the
+ * answer is edited back over the placeholder this posted.
  *
- * The one operational rule that makes this safe (README section 2): Socket Mode
- * allows multiple concurrent connections and Slack delivers `app_mention` to
- * ALL of them. If the Mac bridge is ever re-enabled while this runs, every
- * mention is answered twice by two different agents in the same thread. The Mac
- * side is stopped AND `launchctl disable`d; disable is the half that matters,
- * because a LaunchAgent otherwise returns at next login.
+ * The operational rule that makes this safe: Socket Mode permits multiple
+ * concurrent connections and Slack delivers `app_mention` to EVERY one of them.
+ * Two bridges running against the same app means every mention is answered
+ * twice, by two agents that cannot see each other, in the same thread. Run one.
  */
 
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import bolt from '@slack/bolt';
 
@@ -37,14 +34,12 @@ const MCP_CONFIG = process.env.AGENT_MCP_CONFIG || join(homedir(), '.config', 'b
 /**
  * Tools the agent may use without being asked.
  *
- * `mcp__brave` allows the whole Playwright MCP surface: the accessibility
- * snapshot with refs, navigation, clicking, typing, screenshots. That is the
- * standing order from aside-MEMORY.md ("no confirmations, no draft previews")
- * applied to the browser layer.
+ * `mcp__brave` and `mcp__devtools` allow the whole browser surface: the
+ * accessibility snapshot with refs, navigation, clicking, typing, screenshots.
  *
- * What still bounds her is the workspace cwd and the denied `Task` tool, not a
- * per-action prompt: there is no human at a headless run to answer one, and a
- * denial here surfaces as an honest refusal in Slack rather than a stall.
+ * What bounds the agent is the workspace cwd and the denied tools, not a
+ * per-action prompt. There is no human at a headless run to answer one, and a
+ * denial surfaces as an honest refusal in Slack rather than a stall.
  */
 const ALLOWED_TOOLS = [
   'mcp__brave',
@@ -62,8 +57,8 @@ const ALLOWED_TOOLS = [
 const DEFAULT_CONCURRENCY = 3;
 
 /**
- * Channels the agent will answer in. `*` means any channel she has been invited
- * to, which is already gated by Slack: she only receives `app_mention` from
+ * Channels the agent will answer in. `*` means any channel it has been invited
+ * to, which is already gated by Slack: it only receives `app_mention` from
  * channels someone added her to. A comma-separated list narrows it further.
  */
 function channelAllowed(allowed, channel) {
@@ -82,7 +77,24 @@ const PLACEHOLDER_TEXT = '⏳ running…';
  * mode 600. ALLOWED_USER is the entire security boundary for this bot.
  */
 async function loadEnv(path = ENV_PATH) {
-  const raw = await readFile(path, 'utf8');
+  let raw;
+  try {
+    raw = await readFile(path, 'utf8');
+  } catch (err) {
+    // First run lands here. A bare ENOENT tells someone who has never seen this
+    // project nothing about what to do next.
+    if (err.code === 'ENOENT') {
+      throw new Error(
+        `No config at ${path}\n\n` +
+          `  mkdir -p ${dirname(path)}\n` +
+          `  cp bridge/config.example/* ${dirname(path)}/\n` +
+          `  chmod 600 ${path}\n\n` +
+          `Then fill in SLACK_BOT_TOKEN, SLACK_APP_TOKEN and ALLOWED_USER. ` +
+          `Set AGENT_ENV_PATH to use a different location.`,
+      );
+    }
+    throw err;
+  }
   const out = {};
   for (const line of raw.split('\n')) {
     const trimmed = line.trim();
@@ -97,7 +109,7 @@ async function loadEnv(path = ENV_PATH) {
 /**
  * Adapt a runner result to the shape `formatResult` expects.
  *
- * text.mjs is ported verbatim from the Mac, where the runner returned
+ * text.mjs predates this runner, which returned
  * `{ ok, output, error, timedOut }`. Bending the caller keeps that module
  * byte-identical, which matters: it encodes five Slack rendering faults that
  * were each found in a live channel rather than by any test.
@@ -148,7 +160,7 @@ async function main() {
         token: SLACK_BOT_TOKEN,
         channel: orphan.channel,
         ts: orphan.ts,
-        text: '❌ The bridge restarted while this was running. Ask me again, Captain. 💗',
+        text: '❌ The bridge restarted while this was running. Ask me again.',
       });
     } catch {
       // The message may have been deleted; an orphan is not worth crashing for.
@@ -173,7 +185,7 @@ async function main() {
     const channel = event.channel;
     const threadTs = event.thread_ts || event.ts;
     const mentioned = parseMention(event.text, botUserId);
-    // Route on what he typed, then strip the routing marker so the model is
+    // Route on what the user typed, then strip the routing marker so the model is
     // never handed "deep:" as part of the task.
     const route = pickModel(mentioned);
     const prompt = stripDirective(mentioned);

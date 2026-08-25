@@ -55,7 +55,7 @@ function textElement(text, style, literal = false) {
 /**
  * Parse one line of mrkdwn into rich_text inline elements.
  *
- * Recurses through bold and italic so nested formatting survives. She writes
+ * Recurses through bold and italic so nested formatting survives. The agent writes
  * things like `*`PE-779`:*`, and a flat parser treats the inner backticks as
  * literal characters inside the bold run, which renders them visibly.
  */

@@ -3,8 +3,17 @@
 An agentic browser for Linux. Tag it in Slack, it works in the browser you are
 already signed in to.
 
-The good agentic browsers are macOS-only. This is the same shape, assembled from
-Claude Code, your real Brave, and about 1400 lines of bridge.
+A Linux alternative to [Aside](https://aside.com) and a browser-first
+counterpart to [Hermes Agent](https://github.com/NousResearch/hermes-agent),
+assembled from Claude Code, your real Brave, and about 1400 lines of bridge.
+
+Aside is macOS-only. Hermes runs anywhere but has no first-class browser, and
+its Claude path needs a Max plan with purchased extra credits. This fills the
+gap in between: Linux, your real logged-in browser, billed to a Claude
+subscription rather than per token.
+
+It is smaller and less capable than either. [How it compares](#how-it-compares),
+honestly, below.
 
 ```
 Slack (Socket Mode)
@@ -46,6 +55,66 @@ needs `&<>` escaped in one field and literal in another. Every one of those was
 first written into the prompt, and the agent still got them wrong often enough to
 matter. They are now deterministic functions applied to every message on the way
 out — which is also what let the persona shrink by 82%.
+
+## How it compares
+
+Written by someone who ported from Aside and read Hermes' docs, not by a
+benchmark. Take the "worse" rows seriously.
+
+| | **brave-agent** | **Aside** | **Hermes Agent** |
+|---|---|---|---|
+| Platform | Linux | **macOS only** | anywhere |
+| Licence | MIT | commercial | open source |
+| Browser | first-class, real profile | **first-class, real profile** | not a focus |
+| Billing on Claude | **subscription** (`claude -p`) | subscription | Max + purchased extra credits, or per-token API |
+| Channels | Slack | Slack, Telegram, Discord | **Slack, Telegram, Discord, WhatsApp, Signal, CLI** |
+| Memory | markdown files, grep | local-first, structured | **FTS5 + LLM summarisation** |
+| Skills | markdown, self-extending | **markdown, keyword auto-inject** | markdown, self-improving |
+| Execution backends | local | local | **6, incl. Docker, SSH, Modal** |
+| Users | one, for one day | many | many |
+
+### Where Aside is better
+
+It tops the browser-agent benchmarks — Online-Mind2Web, BU-Bench-V1 and
+Odysseys — and this has been used by one person for one day. It shields
+credentials from the model at the vault layer, where this only instructs the
+agent not to print them. Its single `repl` tool is more expressive than granular
+MCP calls: one 120-second call can snapshot, decide, act and verify where this
+takes a dozen round-trips.
+
+### Where Aside is worse
+
+It does not run on Linux, which is the entire reason this exists. And its own
+internals note that its permission mode was "largely cosmetic", because an
+ungated `bash` tool let the agent shell around the file restrictions. Granular
+gated tools are less expressive but mean a dangerous capability can actually be
+removed: `browser_run_code_unsafe` was denied here after it left a half-created
+calendar event behind, and nothing else broke.
+
+### Where Hermes is better
+
+Six messaging channels through one gateway against this one. Six execution
+backends against local-only. And real memory *retrieval* — full-text search with
+LLM summarisation — where this greps a directory of markdown. That works at ten
+files and will not at two hundred.
+
+### Where Hermes is worse
+
+Its `claude-code` OAuth provider requires a Max plan **with purchased extra
+credits**; the base allowance is never consumed and Pro cannot use it at all.
+The fallback is an API key at per-token pricing. `claude -p` bills a normal
+subscription. If that constraint is what brought you here, Hermes does not
+satisfy it.
+
+It also has no equivalent browser layer. Driving sites you are already logged in
+to is the whole premise here, not an integration.
+
+### What this is honestly good for
+
+Being small enough to read end to end and change, with the reasoning for each
+non-obvious decision written next to it. If you want a product, use Aside on a
+Mac. If you want breadth, use Hermes. If you want your real Linux browser driven
+from Slack on a subscription you already pay for, this is the shape of it.
 
 ## Install
 

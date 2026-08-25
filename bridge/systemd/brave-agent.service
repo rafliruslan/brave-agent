@@ -1,0 +1,29 @@
+# Copy to ~/.config/systemd/user/brave-agent.service, then:
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now brave-agent
+[Unit]
+Description=brave-agent Slack bridge (Socket Mode -> Claude Code -> Brave)
+After=network-online.target
+Wants=network-online.target
+# Only ever ONE bridge may hold the Socket Mode connection. Slack delivers
+# app_mention to EVERY connected client, so a second instance answers each
+# mention a second time, as a separate agent, in the same thread. A crash loop
+# that keeps reconnecting is the likeliest way to end up in that state.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/brave-agent/bridge
+ExecStart=/usr/bin/env node %h/.local/share/brave-agent/bridge/index.mjs
+# If node is managed by a version manager, point PATH at its shims rather than a
+# pinned install path so a version bump does not leave this unit on a stale binary.
+Environment=PATH=%h/.local/share/mise/shims:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=NODE_ENV=production
+# Optional: credentials or other secrets, mode 600.
+# EnvironmentFile=%h/.config/brave-agent/secrets
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

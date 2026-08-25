@@ -1,0 +1,6 @@
+node_modules/
+.playwright-mcp/
+*.log
+# Never commit real config: tokens, ids and persona are per-user.
+config/
+env

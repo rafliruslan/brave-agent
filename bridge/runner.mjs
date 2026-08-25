@@ -1,0 +1,215 @@
+/**
+ * Runs one the agent turn against Claude Code.
+ *
+ * This is the module that replaced the macOS-only `runner.mjs`, which shelled
+ * out to `aside exec`. Everything else in the bridge is unchanged from the Mac.
+ *
+ * Four Aside findings drove the original design (see probe-notes.md). Three of
+ * them do not survive the move, because Claude Code has a structured interface
+ * that Aside's CLI did not:
+ *
+ *   F1 session id is undiscoverable  -> gone. `--session-id <uuid>` assigns it.
+ *   F2 exits 0 on hard errors        -> gone. JSON carries `is_error`/`subtype`.
+ *   F3 ANSI escapes in stdout        -> gone. JSON on stdout.
+ *   F4 hangs unless stdin is closed  -> STILL APPLIES. Node's spawn default is
+ *      stdio ['pipe','pipe','pipe'], leaving the child holding a stdin pipe
+ *      that never reaches EOF. Measured on the Mac: hung >35s vs 779ms with
+ *      stdin ignored. No mocked-spawn unit test can catch this.
+ *
+ * Also measured here, and contrary to ASIDE-INTERNALS section 5: a headless
+ * Claude Code run that hits a permission boundary does NOT hang. It records the
+ * refusal in `permission_denials`, tells the user plainly, and exits success in
+ * ~12s. That is why this runner uses a real permission mode and a scoped cwd
+ * rather than bypassing permissions to avoid a stall that cannot happen.
+ */
+
+import { spawn } from 'node:child_process';
+
+/** A turn that outruns this is killed. Browser work is genuinely slow. */
+export const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
+
+/**
+ * Claude Code says this when a `--resume` target is gone. The Mac hit the same
+ * class of failure constantly: Aside evicted 442 session directories against
+ * 152 registered rows. Detect, forget, retry fresh, never show the user.
+ */
+const DEAD_SESSION = /no conversation found|session .*not found|could not (find|resume)/i;
+
+/**
+ * Tools the agent must never get, enforced in code rather than in the persona.
+ *
+ * The Mac's hardest-won lesson: the persona asked her not to spawn subagents
+ * and she did it anyway, often enough to matter. Every rule that CAN be made
+ * deterministic MUST be, which is also what let the persona shrink 82%.
+ *
+ * `Task`                            one Slack message must be one session, or a
+ *                                   single mention becomes four sidebar entries.
+ *
+ * `mcp__brave__browser_run_code_unsafe`
+ *                                   arbitrary JS against a live logged-in page.
+ *                                   Observed 2026-08-25: `browser_click` cannot
+ *                                   work on Google Calendar (the ref resolves
+ *                                   but Playwright's stability check never
+ *                                   passes), she escalated to raw JS against a
+ *                                   half-open dialog, and left a ghost "No
+ *                                   title" out-of-office event that then had to
+ *                                   be hunted down. `browser_evaluate` against a
+ *                                   specific ref is the supported escape hatch
+ *                                   and is still allowed; unscoped page scripting
+ *                                   is not.
+ *
+ * `mcp__devtools__evaluate_script`
+ *                                   the chrome-devtools-mcp equivalent of the
+ *                                   above. Denied for the same reason, so
+ *                                   adding a second browser server does not
+ *                                   quietly reopen the door we just shut.
+ */
+export const DENIED_TOOLS = [
+  'Task',
+  'mcp__brave__browser_run_code_unsafe',
+  'mcp__devtools__evaluate_script',
+];
+
+function buildArgs({ prompt, sessionId, isNew, model, effort, permissionMode, mcpConfig, allowedTools }) {
+  const args = ['-p', prompt, '--output-format', 'json'];
+
+  // A new thread ASSIGNS its deterministic id; a continuing thread resumes it.
+  if (isNew) args.push('--session-id', sessionId);
+  else args.push('--resume', sessionId);
+
+  if (model) args.push('--model', model);
+  // Both are per-invocation, so a resumed thread can escalate to a stronger
+  // model for one turn and drop back afterwards without starting over.
+  if (effort) args.push('--effort', effort);
+  if (permissionMode) args.push('--permission-mode', permissionMode);
+  // `--strict-mcp-config` is what stops her seeing tools she cannot use.
+  // Without it she inherits every user-scope MCP server from ~/.claude.json
+  // (Gmail, Calendar, Drive, Excalidraw, Linear, Slack...), which ALLOWED_TOOLS
+  // then denies. Observed twice in real threads: she picked the Calendar tool,
+  // was refused, and reported "needs permission" while Google Calendar sat open
+  // and logged in one tab away. A tool that is visible but denied is worse than
+  // one that does not exist, because it stops her before she tries the browser.
+  if (mcpConfig) args.push('--mcp-config', mcpConfig, '--strict-mcp-config');
+  if (allowedTools?.length) args.push('--allowedTools', allowedTools.join(' '));
+  args.push('--disallowedTools', DENIED_TOOLS.join(' '));
+
+  return args;
+}
+
+/**
+ * Execute one turn.
+ *
+ * Returns a structured result. Never throws for an agent-level failure; the
+ * caller decides what reaches Slack.
+ *
+ * @returns {Promise<{ok:boolean, text:string, sessionId:string|null,
+ *   deadSession:boolean, denials:Array, costUsd:number|null, timedOut:boolean,
+ *   raw:string}>}
+ */
+export function runAgent({
+  prompt,
+  sessionId,
+  isNew = false,
+  cwd,
+  model = null,
+  effort = null,
+  permissionMode = 'acceptEdits',
+  mcpConfig = null,
+  allowedTools = null,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  bin = 'claude',
+  spawnFn = spawn,
+} = {}) {
+  return new Promise((resolve) => {
+    const args = buildArgs({ prompt, sessionId, isNew, model, effort, permissionMode, mcpConfig, allowedTools });
+
+    const child = spawnFn(bin, args, {
+      cwd,
+      // F4. Do not change this to 'pipe'. It silently breaks every run.
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: process.env,
+    });
+
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGKILL');
+    }, timeoutMs);
+
+    child.stdout.on('data', (d) => {
+      stdout += d;
+    });
+    child.stderr.on('data', (d) => {
+      stderr += d;
+    });
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      resolve({
+        ok: false,
+        text: `Bridge could not start the agent: ${err.message}`,
+        sessionId: null,
+        deadSession: false,
+        denials: [],
+        costUsd: null,
+        timedOut: false,
+        raw: String(err),
+      });
+    });
+
+    child.on('close', () => {
+      clearTimeout(timer);
+      const combined = `${stdout}\n${stderr}`;
+
+      if (timedOut) {
+        return resolve({
+          ok: false,
+          text: `The agent ran past ${Math.round(timeoutMs / 60000)} minutes and was stopped. Nothing was reported back, so treat the task as unfinished.`,
+          sessionId: null,
+          deadSession: false,
+          denials: [],
+          costUsd: null,
+          timedOut: true,
+          raw: combined,
+        });
+      }
+
+      let parsed = null;
+      try {
+        parsed = JSON.parse(stdout.trim());
+      } catch {
+        // Non-JSON on stdout means the CLI failed before it produced a result.
+        return resolve({
+          ok: false,
+          text: combined.trim() || 'The agent produced no output.',
+          sessionId: null,
+          deadSession: DEAD_SESSION.test(combined),
+          denials: [],
+          costUsd: null,
+          timedOut: false,
+          raw: combined,
+        });
+      }
+
+      const text = String(parsed.result ?? '').trim();
+      // F2's lesson survives in spirit: never trust one signal. An error can be
+      // flagged, or typed as a non-success subtype, or only visible in the text.
+      const failed =
+        parsed.is_error === true || (parsed.subtype && parsed.subtype !== 'success');
+
+      resolve({
+        ok: !failed,
+        text,
+        sessionId: parsed.session_id ?? null,
+        deadSession: DEAD_SESSION.test(`${text}\n${combined}`),
+        denials: parsed.permission_denials ?? [],
+        costUsd: typeof parsed.total_cost_usd === 'number' ? parsed.total_cost_usd : null,
+        timedOut: false,
+        raw: stdout,
+      });
+    });
+  });
+}

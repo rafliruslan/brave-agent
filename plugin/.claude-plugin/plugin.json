@@ -1,0 +1,23 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "brave-agent",
+  "version": "0.1.0",
+  "description": "Drive your real, logged-in Brave browser from Claude Code on Linux over CDP.",
+  "author": {
+    "name": "Rafliansyah Ruslan",
+    "email": "dev@rafliruslan.com"
+  },
+  "skills": [
+    "./"
+  ],
+  "homepage": "https://github.com/rafliruslan/brave-agent",
+  "keywords": [
+    "brave",
+    "browser",
+    "cdp",
+    "playwright",
+    "chrome-devtools",
+    "linux",
+    "agentic-browser"
+  ]
+}

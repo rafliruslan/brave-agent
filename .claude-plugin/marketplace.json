@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "brave-agent",
+  "description": "Agentic control of your real, logged-in Brave browser from Claude Code on Linux",
+  "owner": {
+    "name": "Rafliansyah Ruslan",
+    "email": "dev@rafliruslan.com"
+  },
+  "plugins": [
+    {
+      "name": "brave-agent",
+      "description": "Drive your real, logged-in Brave browser from Claude Code on Linux over CDP. Bundles Playwright MCP and chrome-devtools-mcp against one running browser, with skills for reading pages as accessibility trees, recovering from clicks Playwright refuses, and working canvas apps.",
+      "author": { "name": "Rafliansyah Ruslan" },
+      "category": "productivity",
+      "source": "./plugin"
+    }
+  ]
+}

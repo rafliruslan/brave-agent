@@ -1,6 +1,9 @@
 node_modules/
 .playwright-mcp/
 *.log
-# Never commit real config: tokens, ids and persona are per-user.
-config/
-env
+
+# Real config lives in ~/.config/brave-agent, never in the repo.
+# The templates under bridge/config.example/ are intentionally tracked.
+/env
+/config/
+persona.local.md

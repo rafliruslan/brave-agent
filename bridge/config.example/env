@@ -1,0 +1,19 @@
+# Copy to ~/.config/brave-agent/env and chmod 600.
+# Never commit this file.
+
+# From api.slack.com/apps -> OAuth & Permissions
+SLACK_BOT_TOKEN=xoxb-...
+
+# From Basic Information -> App-Level Tokens, scope connections:write
+SLACK_APP_TOKEN=xapp-...
+
+# The ONLY access control. Your Slack user id (Profile -> More -> Copy member ID).
+# Mentions from anyone else are ignored in silence.
+ALLOWED_USER=U00000000
+
+# Channels to answer in. "*" means any channel the bot was invited to,
+# which Slack already gates. A comma-separated list narrows it further.
+ALLOWED_CHANNEL=*
+
+# Threads run one at a time; this caps how many threads run together.
+MAX_CONCURRENT=3

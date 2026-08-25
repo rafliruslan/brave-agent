@@ -58,11 +58,23 @@ out — which is also what let the persona shrink by 82%.
 # 2. Harness
 git clone https://github.com/rafliruslan/brave-agent ~/.local/share/brave-agent
 cd ~/.local/share/brave-agent/bridge && npm install
-cp -r config.example/* ~/.config/brave-agent/     # then edit env, chmod 600
-cp ../workspace ~/.local/share/brave-agent/workspace -r
+
+mkdir -p ~/.config/brave-agent
+cp config.example/* ~/.config/brave-agent/
+chmod 600 ~/.config/brave-agent/env        # then fill in your tokens
+
 cp systemd/brave-agent.service ~/.config/systemd/user/
+systemctl --user daemon-reload
 systemctl --user enable --now brave-agent
 ```
+
+The agent's `workspace/` ships inside the clone and is used in place — copy it
+somewhere else and set `AGENT_WORKSPACE` only if you want the repo to stay
+pristine while the agent writes its own memory.
+
+Optionally give it a character: `cp examples/hammock/persona.md
+~/.config/brave-agent/persona.md` and edit. Without one it falls back to a plain
+assistant that still carries the honesty and autonomy rules.
 
 You need a Slack app with Socket Mode on, `app_mention` subscribed, and 11 bot
 scopes — `app_mentions:read`, `chat:write`, `users:read`, `channels:read`,

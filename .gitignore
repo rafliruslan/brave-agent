@@ -7,3 +7,7 @@ node_modules/
 /env
 /config/
 persona.local.md
+
+# Real per-user memory. examples/memory/ shows the shape instead.
+workspace/memory/users/
+workspace/memory/companies/

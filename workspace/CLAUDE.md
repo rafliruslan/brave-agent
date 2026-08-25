@@ -57,7 +57,10 @@ whole tree.
 | `memory/companies/a1c.md` | Workspace, channel, user and usergroup ids |
 | `memory/sites/app.slack.com.md` | Driving Slack in the browser. Read before typing into Slack. |
 | `memory/sites/app.excalidraw.com.md` | Drawing by pasting scene JSON, not by mouse |
-| `memory/concepts/git-and-repos.md` | Commit and branch rules for his repos |
+| `memory/concepts/git-and-repos.md` | Commit and branch rules for the user's repos |
+
+`memory/users/` and `memory/companies/` are not shipped: they are yours to
+write. See `examples/memory/` in the repo for what belongs in them.
 
 **When you learn something durable, write it down.** A fact that will still be
 true next week, that you had to discover, goes in the matching file with the

@@ -1,0 +1,12 @@
+[Unit]
+Description=Consolidate recent sessions and browsing into the agent's memory
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.local/share/brave-agent/bridge
+ExecStart=/usr/bin/env node %h/.local/share/brave-agent/bridge/dream.mjs
+Environment=PATH=%h/.local/share/mise/shims:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# Only new transcripts since the last run, so a nightly pass is far smaller
+# (and cheaper) than the first --all run.
+TimeoutStartSec=1800

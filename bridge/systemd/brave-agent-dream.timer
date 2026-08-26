@@ -1,0 +1,12 @@
+[Unit]
+Description=Nightly memory consolidation
+
+[Timer]
+# 04:00 local. Late enough that the day's sessions are done, and it runs on the
+# next boot if the machine was asleep.
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+RandomizedDelaySec=900
+
+[Install]
+WantedBy=timers.target

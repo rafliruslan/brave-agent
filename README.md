@@ -30,6 +30,45 @@ Slack (Socket Mode)
 | **`plugin/`** | A Claude Code plugin: two MCP servers on one running Brave, plus the browser skills and `/brave-setup`. Useful on its own if you just want Claude Code to drive your browser from a terminal. |
 | **`bridge/`** | The harness. A Slack Socket Mode daemon that maps threads to sessions, serialises work per thread, survives restarts, and recovers its own orphaned messages. |
 | **`workspace/`** | The agent's memory and skills, as a starting template. Semantic memory it reads on demand, procedural skills it can extend itself. |
+| **`repl/`** | A third MCP server of our own: accessibility snapshots that return a **diff** rather than the whole tree. See `repl/README.md`. |
+
+## It learns while you use it
+
+`bridge/dream.mjs` runs nightly and consolidates two things into the memory tree:
+recent conversations with tool calls stripped, and a digest of how you actually
+used the browser when nobody asked you anything.
+
+The browsing half matters more than it sounds. Sites you return to daily are the
+tools you live in; a site that never appears in a conversation is a project the
+agent does not know exists. On the first real run it connected three unrelated
+domains and wrote *"something token-adjacent is being scoped"* about work it had
+never been told about.
+
+`bridge/observe.mjs` produces that digest and is deliberately **aggregate**:
+domains, counts, busiest hours, recurring page titles. Never a URL log. Whatever
+it writes ends up in a file an agent reads while also reading arbitrary web
+pages, so a browsing history sitting in that context is an exfiltration target.
+Domain counts are not. A log is also not a pattern: "177 visits to Slack,
+concentrated 09:00-11:00" is worth keeping, 847 timestamped URLs is not.
+
+Lines where you corrected or contradicted the agent are flagged `[PUSHBACK]`,
+because a correction is you stating a preference at the one moment you cared
+enough to interrupt. It is told to turn those into rules.
+
+Two things this taught us, both now in the code:
+
+- **It must not read its own transcripts.** Dream runs in the same workspace, so
+  its output lands where the next run looks. Left alone it consolidates its own
+  reflections, and its own "do NOT write" instructions match the correction
+  regex and get flagged as you pushing back.
+- **It fixes its own bugs.** One run noticed that six sessions had each burned a
+  turn on the same permission denial, traced it to a wrong path in its own
+  `skill-creator` skill, corrected it, and recorded the exact error text so a
+  future session recognises it.
+
+Costs real money: $1.60 for the first twelve sessions, $0.90 for the next batch
+once most of it was already recorded. Disable with
+`systemctl --user disable --now brave-agent-dream.timer`.
 
 ## Why it works on real sites
 

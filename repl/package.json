@@ -1,0 +1,12 @@
+{
+  "name": "brave-repl-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Batched, typed browser actions and diffing snapshots over an existing CDP connection",
+  "main": "server.mjs",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "playwright-core": "^1.49.0"
+  }
+}

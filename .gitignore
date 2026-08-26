@@ -11,3 +11,4 @@ persona.local.md
 # Real per-user memory. examples/memory/ shows the shape instead.
 workspace/memory/users/
 workspace/memory/companies/
+repl/node_modules/

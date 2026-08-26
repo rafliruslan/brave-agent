@@ -50,6 +50,11 @@ const ALLOWED_TOOLS = [
   // `browser_click` failed three times; devtools click returned "Successfully
   // clicked on the element" on the first attempt.
   'mcp__devtools',
+  // brave-repl: the same browser again, but its snapshot returns a DIFF.
+  // Measured on Google Calendar: 5415 bytes for the full tree against 227 for
+  // the diff after opening a menu. Re-reading a page is the most repeated thing
+  // the agent does, so this is where the tokens are.
+  'mcp__brave-repl',
   'Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebFetch', 'WebSearch',
 ];
 

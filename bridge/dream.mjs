@@ -21,7 +21,8 @@
  */
 
 import { readFile, writeFile, readdir, stat } from 'node:fs/promises';
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { observe, render as renderBrowsing } from './observe.mjs';
@@ -45,6 +46,64 @@ const TRANSCRIPTS =
 const STATE =
   process.env.AGENT_DREAM_STATE ||
   join(homedir(), '.local', 'state', 'brave-agent', 'dream.json');
+
+const exec = promisify(execFile);
+
+/**
+ * Commit and push the memory tree if it is a git repo.
+ *
+ * This runs unattended on a timer, so without it the backup silently goes stale
+ * from the first night onwards and you find out when you need it. Entirely
+ * optional: if the workspace is not a repo, or has no remote, or nothing
+ * changed, this does nothing and says so. A backup failure must never look like
+ * a consolidation failure, so every step here is non-fatal.
+ */
+async function backup(workspace) {
+  const git = (...args) => exec('git', ['-C', workspace, ...args]);
+  try {
+    await git('rev-parse', '--is-inside-work-tree');
+  } catch {
+    return 'not a git repo, skipped';
+  }
+  try {
+    const { stdout } = await git('status', '--porcelain');
+    if (!stdout.trim()) return 'no changes';
+
+    const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    await git('add', '-A');
+    await git('commit', '-m', `memory: consolidation ${stamp}`);
+
+    try {
+      await git('remote', 'get-url', 'origin');
+    } catch {
+      return 'committed, no remote to push to';
+    }
+
+    // A rejected push usually means the same repo was written from another
+    // machine, which is normal when memory is backed up from more than one
+    // place. Rebase onto whatever arrived and try once more. Observed
+    // 2026-08-26: an unrelated export pushed from elsewhere blocked the first
+    // automated backup, and a silent --quiet push hid the reason.
+    try {
+      await git('push', '--quiet', 'origin', 'HEAD');
+      return 'committed and pushed';
+    } catch (first) {
+      try {
+        await git('fetch', '--quiet', 'origin');
+        await git('-c', 'rebase.autoStash=true', 'rebase', 'origin/HEAD');
+        await git('push', '--quiet', 'origin', 'HEAD');
+        return 'committed and pushed after rebasing onto remote changes';
+      } catch (second) {
+        // Leave the rebase un-abandoned rather than guessing; a human should
+        // look. The commit is safe locally either way.
+        await git('rebase', '--abort').catch(() => {});
+        return `committed locally, push rejected: ${String(first.message).split('\n')[0]}`;
+      }
+    }
+  } catch (e) {
+    return `backup failed: ${e.message.split('\n')[0]}`;
+  }
+}
 
 /** Per session, so one enormous thread cannot crowd out five short ones. */
 const MAX_TURNS_PER_SESSION = 40;
@@ -285,6 +344,7 @@ async function main() {
   }
 
   console.log(`[dream] ${parsed.result}`);
+  console.log(`[dream] backup: ${await backup(WORKSPACE)}`);
   await writeFile(
     STATE,
     JSON.stringify({ lastRun: Date.now(), sessions: parts.length, cost: parsed.total_cost_usd }, null, 2),

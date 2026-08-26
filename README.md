@@ -66,9 +66,19 @@ Two things this taught us, both now in the code:
   `skill-creator` skill, corrected it, and recorded the exact error text so a
   future session recognises it.
 
-Costs real money: $1.60 for the first twelve sessions, $0.90 for the next batch
-once most of it was already recorded. Disable with
-`systemctl --user disable --now brave-agent-dream.timer`.
+**What it costs.** Runs report a `total_cost_usd`: $1.60 for the first twelve
+sessions, then $0.90, then $0.70 as more of it was already recorded. On a Claude
+subscription that figure is **notional** — it is what those tokens would have
+cost at API list price, not a charge. What the run actually consumes is your
+plan's usage allowance, roughly one substantial Opus conversation per night,
+spent whether or not the day taught it anything. With an `ANTHROPIC_API_KEY` set
+it is a real charge.
+
+The falling curve is the thing to watch either way: a well-fed memory makes each
+pass cheaper, because most of what it reads is already recorded and it says so
+rather than rewriting it.
+
+Disable with `systemctl --user disable --now brave-agent-dream.timer`.
 
 ## Why it works on real sites
 

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS counterpart of systemd/brave-agent.service.
+
+  Copy to ~/Library/LaunchAgents/com.brave-agent.bridge.plist, replace USERNAME,
+  then:
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.brave-agent.bridge.plist
+
+  To stop it for good, both steps are needed. LaunchAgents reload at login, so
+  bootout alone lets it come back and start answering alongside another bridge:
+    launchctl bootout  gui/$(id -u)/com.brave-agent.bridge
+    launchctl disable  gui/$(id -u)/com.brave-agent.bridge
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.brave-agent.bridge</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/node</string>
+        <string>/Users/USERNAME/.local/share/brave-agent/bridge/index.mjs</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/USERNAME/.local/share/brave-agent/bridge</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>NODE_ENV</key>
+        <string>production</string>
+        <key>AGENT_PERSONA_PATH</key>
+        <string>/Users/USERNAME/.config/brave-agent/persona.md</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <!--
+      Only ever ONE bridge may hold the Socket Mode connection. Slack delivers
+      app_mention to EVERY connected client, so a second instance answers each
+      mention again, as a separate agent, in the same thread. This throttle is
+      the launchd equivalent of StartLimitBurst: it stops a crash loop from
+      reconnecting faster than the lock can settle.
+    -->
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    <key>StandardOutPath</key>
+    <string>/Users/USERNAME/Library/Logs/brave-agent.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/USERNAME/Library/Logs/brave-agent.stderr.log</string>
+</dict>
+</plist>

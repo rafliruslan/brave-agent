@@ -1,16 +1,19 @@
 # brave-agent
 
-An agentic browser for Linux. Tag it in Slack, it works in the browser you are
-already signed in to.
+An agentic browser for Linux and macOS. Tag it in Slack, it works in the
+browser you are already signed in to.
 
-A Linux alternative to [Aside](https://aside.com) and a browser-first
+A portable alternative to [Aside](https://aside.com) and a browser-first
 counterpart to [Hermes Agent](https://github.com/NousResearch/hermes-agent),
 assembled from Claude Code, your real Brave, and about 1400 lines of bridge.
 
 Aside is macOS-only. Hermes runs anywhere but has no first-class browser, and
 its Claude path needs a Max plan with purchased extra credits. This fills the
-gap in between: Linux, your real logged-in browser, billed to a Claude
+gap in between: your real logged-in browser, on either OS, billed to a Claude
 subscription rather than per token.
+
+It started as a Linux escape hatch from Aside. It kept the macOS half so that
+moving between the two machines does not mean maintaining two agents.
 
 It is smaller and less capable than either. [How it compares](#how-it-compares),
 honestly, below.
@@ -153,7 +156,7 @@ benchmark. Take the "worse" rows seriously.
 
 | | **brave-agent** | **Aside** | **Hermes Agent** |
 |---|---|---|---|
-| Platform | Linux | **macOS only** | anywhere |
+| Platform | Linux, macOS | **macOS only** | anywhere |
 | Licence | MIT | commercial | open source |
 | Browser | first-class, real profile | **first-class, real profile** | not a focus |
 | Billing on Claude | **subscription** (`claude -p`) | subscription | Max + purchased extra credits, or per-token API |
@@ -203,8 +206,9 @@ to is the whole premise here, not an integration.
 
 Being small enough to read end to end and change, with the reasoning for each
 non-obvious decision written next to it. If you want a product, use Aside on a
-Mac. If you want breadth, use Hermes. If you want your real Linux browser driven
-from Slack on a subscription you already pay for, this is the shape of it.
+Mac. If you want breadth, use Hermes. If you want your own real browser driven
+from Slack on a subscription you already pay for, and the same setup to survive
+switching OS, this is the shape of it.
 
 ## Install
 
@@ -222,9 +226,17 @@ mkdir -p ~/.config/brave-agent
 cp config.example/* ~/.config/brave-agent/
 chmod 600 ~/.config/brave-agent/env        # then fill in your tokens
 
+# 3. Keep it running (pick your platform)
+
+# Linux
 cp systemd/brave-agent.service ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now brave-agent
+
+# macOS
+sed "s|/Users/USERNAME|$HOME|g" bridge/launchd/com.brave-agent.bridge.plist \
+  > ~/Library/LaunchAgents/com.brave-agent.bridge.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.brave-agent.bridge.plist
 ```
 
 The agent's `workspace/` ships inside the clone and is used in place. Copy it
@@ -255,6 +267,43 @@ Slack has no typing indicator for ordinary bots. The nearest equivalent is
 assistant and only works inside assistant threads. The bridge calls it anyway
 and ignores the refusal, so turning the Agents feature on later lights it up
 with no code change.
+
+## It runs the same on Linux and macOS
+
+Nothing in the bridge or the REPL is written against an OS. Every path is
+`homedir()` plus an XDG-shaped suffix, which is a plain directory on macOS too,
+and the browser layer talks to `127.0.0.1:9222` over CDP, which does not care
+what started the browser. `node --test` passes on both.
+
+Two things genuinely differ, and both are one file each:
+
+**Service manager.** `bridge/systemd/` holds the Linux units,
+`bridge/launchd/` the macOS agents with the same names and the same jobs. The
+launchd plists carry hardcoded paths with `USERNAME` in them, because launchd
+expands neither `~` nor `$HOME`, so they are written to be `sed`-ed once at
+install. `ThrottleInterval` stands in for `StartLimitBurst`: same purpose, which
+is stopping a crash loop from reconnecting faster than the single-instance lock
+can settle.
+
+There is no launchd timer unit, so `brave-agent-dream.timer` and
+`brave-agent-routines.timer` become `StartInterval` seconds on the job itself.
+That loses the systemd `Persistent=true` behaviour, where a timer missed while
+the machine was asleep fires on wake. On macOS a `StartInterval` job that comes
+due while asleep runs once at wake, which is close enough for a memory
+consolidation pass and worth knowing about for anything that must not be skipped.
+
+**Browser flags.** On Arch, `/usr/bin/brave` sources `brave-flags.conf`, so
+every launcher inherits the debug port. macOS has no such file: LaunchServices
+starts the app bundle directly, so a Dock or Spotlight launch passes no
+arguments and the port silently does not open. `/brave-setup` handles this with
+a login-time launchd agent plus a `~/.local/bin/brave` wrapper, and says so out
+loud, because the failure mode is a port that is simply absent with no error
+anywhere.
+
+The Chromium 136+ rule that `--remote-debugging-port` is refused at the default
+profile path applies on both, so the profile moves to
+`~/.local/share/brave-profile` either way and every other path in the repo lines
+up unchanged.
 
 ## Things that took a day each
 

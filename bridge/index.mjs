@@ -26,6 +26,7 @@ import { runAgent } from './runner.mjs';
 import { healBrowser } from './browser-health.mjs';
 import { pickModel, stripDirective } from './router.mjs';
 import { acquire, release } from './lock.mjs';
+import { react, settle, setStatus, WORKING } from './status.mjs';
 
 const { App } = bolt;
 
@@ -199,6 +200,7 @@ async function main() {
 
     await queue.add(threadTs, async () => {
       let placeholderTs = null;
+      let ok = false;
 
       try {
         const posted = await client.chat.postMessage({
@@ -210,6 +212,10 @@ async function main() {
         // Recorded BEFORE the run, cleared after: that ordering is what makes
         // "still present at startup" mean "orphaned" and nothing else.
         await pendingStore.add(channel, placeholderTs, { threadTs });
+        // Visible from the channel list, unlike the reply. Best effort: with
+        // no reactions:write these no-op and the bridge behaves as before.
+        await react(client, { channel, ts: event.ts, name: WORKING, logger: console });
+        await setStatus(client, { channel, threadTs, status: 'Working…', logger: console });
         console.log(`[agent] ${threadTs} -> ${route.model}/${route.effort} (${route.reason})`);
 
         const threadContext = await fetchThreadContext(client, {
@@ -322,6 +328,7 @@ async function main() {
           text: body,
           ...(blocks ? { blocks } : {}),
         });
+        ok = !/^(❌|⏱|🌐|⚠️)/.test(body);
       } catch (err) {
         console.error('[agent] run failed:', err);
         if (placeholderTs) {
@@ -336,6 +343,8 @@ async function main() {
           }
         }
       } finally {
+        await settle(client, { channel, ts: event.ts, ok, logger: console });
+        await setStatus(client, { channel, threadTs, status: '', logger: console });
         if (placeholderTs) await pendingStore.remove(channel, placeholderTs);
       }
     });

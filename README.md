@@ -220,6 +220,17 @@ scopes: `app_mentions:read`, `chat:write`, `users:read`, `channels:read`,
 `groups:read`, `mpim:read`, `im:read`, and the four `*:history` ones, which
 `conversations.replies` needs so it can read a thread it was tagged into late.
 
+`reactions:write` is optional. With it, the agent marks your own message 👀 when
+it picks the work up and ✅ or ❌ when it finishes, which is visible from the
+channel list rather than only inside the thread. Without it those calls no-op
+and nothing else changes.
+
+Slack has no typing indicator for ordinary bots. The nearest equivalent is
+`assistant.threads.setStatus`, which needs the app configured as an AI
+assistant and only works inside assistant threads. The bridge calls it anyway
+and ignores the refusal, so turning the Agents feature on later lights it up
+with no code change.
+
 ## Things that took a day each
 
 Collected here so they cost you an afternoon instead.

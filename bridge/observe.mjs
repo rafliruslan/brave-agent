@@ -114,7 +114,7 @@ export function render({ meta, hosts }) {
 
   const rows = hosts
     .slice(0, 20)
-    .map((h) => `  ${String(h.visits).padStart(4)}  ${h.host}${h.titles ? `  — ${h.titles}` : ''}`)
+    .map((h) => `  ${String(h.visits).padStart(4)}  ${h.host}${h.titles ? `  : ${h.titles}` : ''}`)
     .join('\n');
 
   return [

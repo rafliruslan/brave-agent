@@ -1,0 +1,35 @@
+#!/bin/sh
+# Reject em dashes in staged text.
+#
+# The ban is stated in the README and in the workspace memory. It was still
+# violated 25 times across 8 files in this repo, including in the skill that
+# other agents read and in the example memory that every new install copies,
+# while everyone believed a hook was enforcing it. The hook existed, but only
+# in one repo's .git/hooks, which is not version controlled and does not
+# survive a clone. Hence this file, which is tracked.
+#
+# Activate it once per clone (git will not do this for you):
+#   git config core.hooksPath .githooks
+#
+# No auto-fix: the right replacement is a colon, a comma, parentheses or a
+# rewrite depending on the sentence, and guessing produces worse prose than a
+# human choosing. Bypass with --no-verify if you ever genuinely need one.
+
+bad=$(git diff --cached --name-only --diff-filter=ACM \
+      | while read -r f; do
+          [ -f "$f" ] || continue
+          case "$f" in node_modules/*|*.png|*.jpg|*.jpeg|*.gif|*.pdf|*.ico) continue ;; esac
+          # A line may keep an em dash by saying so: bridge/text.mjs is the
+          # function that strips them, and cannot do that without one.
+          if git show ":$f" 2>/dev/null | grep '—' | grep -qv 'em-dash-ok'; then
+            n=$(git show ":$f" | grep '—' | grep -cv 'em-dash-ok')
+            printf '  %s (%s)\n' "$f" "$n"
+          fi
+        done)
+
+if [ -n "$bad" ]; then
+  printf 'Em dashes found in staged files:\n%s\n\n' "$bad"
+  printf 'Replace with a colon, a comma, parentheses, or a rewrite. Then re-stage.\n'
+  exit 1
+fi
+exit 0

@@ -144,8 +144,10 @@ export function toSlackText(text) {
   // Em dashes may be banned in the user's writing, and the agent still reaches for
   // them. A dash between two numbers is a range and becomes a hyphen; anywhere
   // else it is doing the job of a comma, so it becomes one.
-  out = out.replace(/(\d)\s*[—–]\s*(\d)/g, '$1-$2');
-  out = out.replace(/\s*[—–]\s*/g, ', ');
+  // These two lines ARE the stripper, so they have to contain the character
+  // the hook rejects. The marker is what lets them through it.
+  out = out.replace(/(\d)\s*[—–]\s*(\d)/g, '$1-$2'); // em-dash-ok
+  out = out.replace(/\s*[—–]\s*/g, ', '); // em-dash-ok
 
   // Tidy the gaps left by anything removed above.
   return out.replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();

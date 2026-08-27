@@ -68,7 +68,7 @@ Two things this taught us, both now in the code:
 
 **What it costs.** Runs report a `total_cost_usd`: $1.60 for the first twelve
 sessions, then $0.90, then $0.70 as more of it was already recorded. On a Claude
-subscription that figure is **notional** — it is what those tokens would have
+subscription that figure is **notional**: it is what those tokens would have
 cost at API list price, not a charge. What the run actually consumes is your
 plan's usage allowance, roughly one substantial Opus conversation per night,
 spent whether or not the day taught it anything. With an `ANTHROPIC_API_KEY` set
@@ -87,7 +87,7 @@ already exist. Nothing does OAuth, no credentials are handled. Anything it does
 is done as you.
 
 **It reads trees, not pixels.** `browser_snapshot` returns an accessibility tree
-with stable refs — a few KB against a screenshot's hundreds, no vision needed,
+with stable refs: a few KB against a screenshot's hundreds, no vision needed,
 and refs survive re-renders far better than CSS selectors. Screenshots are for
 questions genuinely about pixels.
 
@@ -103,7 +103,7 @@ asterisks, has no list syntax at all, cannot render a Markdown image tag, and
 needs `&<>` escaped in one field and literal in another. Every one of those was
 first written into the prompt, and the agent still got them wrong often enough to
 matter. They are now deterministic functions applied to every message on the way
-out — which is also what let the persona shrink by 82%.
+out, which is also what let the persona shrink by 82%.
 
 ## How it compares
 
@@ -124,8 +124,8 @@ benchmark. Take the "worse" rows seriously.
 
 ### Where Aside is better
 
-It tops the browser-agent benchmarks — Online-Mind2Web, BU-Bench-V1 and
-Odysseys — and this has been used by one person for one day. It shields
+It tops the browser-agent benchmarks (Online-Mind2Web, BU-Bench-V1 and
+Odysseys), and this has been used by one person for one day. It shields
 credentials from the model at the vault layer, where this only instructs the
 agent not to print them. Its single `repl` tool is more expressive than granular
 MCP calls: one 120-second call can snapshot, decide, act and verify where this
@@ -143,8 +143,8 @@ calendar event behind, and nothing else broke.
 ### Where Hermes is better
 
 Six messaging channels through one gateway against this one. Six execution
-backends against local-only. And real memory *retrieval* — full-text search with
-LLM summarisation — where this greps a directory of markdown. That works at ten
+backends against local-only. And real memory *retrieval*, full-text search with
+LLM summarisation, where this greps a directory of markdown. That works at ten
 files and will not at two hundred.
 
 ### Where Hermes is worse
@@ -186,7 +186,7 @@ systemctl --user daemon-reload
 systemctl --user enable --now brave-agent
 ```
 
-The agent's `workspace/` ships inside the clone and is used in place — copy it
+The agent's `workspace/` ships inside the clone and is used in place. Copy it
 somewhere else and set `AGENT_WORKSPACE` only if you want the repo to stay
 pristine while the agent writes its own memory.
 
@@ -195,7 +195,7 @@ Optionally give it a character: `cp examples/hammock/persona.md
 assistant that still carries the honesty and autonomy rules.
 
 You need a Slack app with Socket Mode on, `app_mention` subscribed, and 11 bot
-scopes — `app_mentions:read`, `chat:write`, `users:read`, `channels:read`,
+scopes: `app_mentions:read`, `chat:write`, `users:read`, `channels:read`,
 `groups:read`, `mpim:read`, `im:read`, and the four `*:history` ones, which
 `conversations.replies` needs so it can read a thread it was tagged into late.
 
@@ -223,7 +223,7 @@ sessions being evicted.
 
 **A tool that is visible but denied is worse than one that does not exist.** The
 agent will pick the API connector it can see, be refused, and report a permission
-problem — while the site sits logged in one tab away. Use `--strict-mcp-config`
+problem, while the site sits logged in one tab away. Use `--strict-mcp-config`
 so it only sees what it can actually use.
 
 **A config-driven default that works is the hardest kind to notice.** Moving the

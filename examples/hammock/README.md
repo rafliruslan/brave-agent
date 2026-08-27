@@ -26,6 +26,6 @@ What survived that cut, and why:
 
 ## Identity files
 
-A persona is only half of it. The other half is `workspace/memory/users/` — who
+A persona is only half of it. The other half is `workspace/memory/users/`, who
 you are, how you write, what you expect. Those are personal and are not in this
 repo; the setup command scaffolds empty ones for you to fill in.

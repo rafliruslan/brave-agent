@@ -5,7 +5,7 @@
  * reachable from playwright-core's public API, and `ariaSnapshot({ref:true})`
  * accepts the option but emits no refs. So this walks the DOM itself and tags
  * each interesting element with `data-bref`, which makes every ref directly
- * resolvable afterwards by `page.locator('[data-bref="e42"]')` — no internals,
+ * resolvable afterwards by `page.locator('[data-bref="e42"]')`, no internals,
  * no version coupling, and the tag survives until the next snapshot.
  *
  * Refs are ours alone. `mcp__brave__*` emits `[ref=e12]` and `mcp__devtools__*`
@@ -64,7 +64,7 @@ export function collect(prevSerial) {
     own = own.replace(/\s+/g, ' ').trim();
     if (own) return own;
 
-    // Controls usually carry their label in nested spans — Google's buttons are
+    // Controls usually carry their label in nested spans. Google's buttons are
     // icon span + text span + arrow span, which own-text-only reads as unnamed.
     // Descend for those, joining with spaces so "add" + "Create" does not
     // become "addCreate", and drop Material icon ligatures which are glyph

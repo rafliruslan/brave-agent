@@ -84,7 +84,7 @@ function locate(page, ref) {
  *
  * Playwright's actionability gate requires the bounding box to be unchanged
  * across two consecutive animation frames, which continuously animating pages
- * never satisfy — Google Calendar refuses every time while being perfectly
+ * never satisfy. Google Calendar refuses every time while being perfectly
  * clickable. So: try a real click briefly, and fall back to a DOM click rather
  * than failing. Report which path ran, because a DOM click bypasses handlers a
  * real one would trigger and that occasionally matters.
@@ -169,7 +169,7 @@ const TOOLS = [
   {
     name: 'snapshot',
     description:
-      'Accessibility tree of a page with stable [ref=eNN] ids. mode "diff" returns only what appeared and disappeared since your last snapshot of that page, which is usually a fraction of the size — measured at 190 bytes against a 5.5KB full tree. Use diff for every read after the first. These refs work only with this server; mcp__brave__ and mcp__devtools__ each use their own.',
+      'Accessibility tree of a page with stable [ref=eNN] ids. mode "diff" returns only what appeared and disappeared since your last snapshot of that page, which is usually a fraction of the size, measured at 190 bytes against a 5.5KB full tree. Use diff for every read after the first. These refs work only with this server; mcp__brave__ and mcp__devtools__ each use their own.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -181,7 +181,7 @@ const TOOLS = [
   {
     name: 'act',
     description:
-      'Run several typed browser steps in ONE call, then return the snapshot diff. Worth using only when the steps are INDEPENDENT of each other: filling six known form fields then submitting, or a fixed navigate-wait-screenshot sequence. It does NOT help when a step needs a ref you can only learn from the previous step\'s result, which is most browser work — measured on a real task, batching saved zero turns because the menu had to open before its items could be referenced. Steps stop at the first failure by default and report which one failed with the page state at that moment. Clicks try real input first and fall back to a DOM click when Playwright\'s stability gate refuses, which it always does on continuously animating pages.',
+      'Run several typed browser steps in ONE call, then return the snapshot diff. Worth using only when the steps are INDEPENDENT of each other: filling six known form fields then submitting, or a fixed navigate-wait-screenshot sequence. It does NOT help when a step needs a ref you can only learn from the previous step\'s result, which is most browser work. Measured on a real task, batching saved zero turns because the menu had to open before its items could be referenced. Steps stop at the first failure by default and report which one failed with the page state at that moment. Clicks try real input first and fall back to a DOM click when Playwright\'s stability gate refuses, which it always does on continuously animating pages.',
     inputSchema: {
       type: 'object',
       required: ['steps'],
@@ -230,7 +230,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     if (name === 'pages') {
       const pages = allPages(b);
       const rows = await Promise.all(
-        pages.map(async (p, i) => `${i}: ${await p.title().catch(() => '?')} — ${p.url()}`),
+        pages.map(async (p, i) => `${i}: ${await p.title().catch(() => '?')} | ${p.url()}`),
       );
       return { content: [{ type: 'text', text: rows.join('\n') }] };
     }

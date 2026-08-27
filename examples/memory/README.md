@@ -17,7 +17,7 @@ workspace/memory/
 
 `agent/`, `sites/` and `concepts/` ship populated in `workspace/`, because they
 are about the tool rather than about you. `users/` and `companies/` are yours to
-write — these two files show what belongs in them.
+write: these two files show what belongs in them.
 
 ## What makes a memory file earn its place
 

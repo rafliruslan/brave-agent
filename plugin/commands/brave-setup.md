@@ -58,11 +58,11 @@ mv ~/.config/BraveSoftware/Brave-Browser ~/.local/share/brave-profile
 ```
 
 Same filesystem, so it is instant. Cookies stay decryptable because the OS
-keyring entry is unchanged — do **not** copy to a different machine or user.
+keyring entry is unchanged. Do **not** copy to a different machine or user.
 
 ## 4. Add the flags
 
-Check whether the launcher reads a flags file — on Arch, `/usr/bin/brave` is a
+Check whether the launcher reads a flags file. On Arch, `/usr/bin/brave` is a
 shell script that sources `$XDG_CONFIG_HOME/brave-flags.conf` and prepends
 whatever it finds:
 
@@ -72,7 +72,7 @@ head -20 $(command -v brave)
 
 **If it does**, append to `~/.config/brave-flags.conf`. This is much better than
 a wrapper script or editing `.desktop` files, because every launcher inherits
-it — the desktop entry, any web-app entries, and the user's own shell.
+it: the desktop entry, any web-app entries, and the user's own shell.
 
 ```
 --user-data-dir=/home/USER/.local/share/brave-profile
@@ -83,7 +83,7 @@ it — the desktop entry, any web-app entries, and the user's own shell.
 Substitute the real home path (no `~`, it is not expanded) and the profile
 directory chosen in step 2.
 
-**If it does not**, create a wrapper — but check PATH order first, because
+**If it does not**, create a wrapper, but check PATH order first, because
 `~/.local/bin` is often placed *after* `/usr/bin` and then shadows nothing:
 
 ```bash
@@ -102,7 +102,7 @@ curl -s http://127.0.0.1:9222/json/version | head -5
 ```
 
 Expect JSON with `Browser` and `webSocketDebuggerUrl`. Then confirm it is the
-*intended profile*, not a fresh one — navigate to `brave://version` and read the
+*intended profile*, not a fresh one. Navigate to `brave://version` and read the
 `Profile Path` line, or check the cookie count:
 
 ```bash
@@ -137,7 +137,7 @@ whatever the user is looking at:
 o.window("^brave-browser$", { workspace = "2 silent" })
 ```
 
-`silent` is the load-bearing half — without it, opening Brave drags them there.
+`silent` is the load-bearing half. Without it, opening Brave drags them there.
 Anchor the class: web-app windows are a different class
 (`brave-app.slack.com__client-Default`) and should not be moved.
 

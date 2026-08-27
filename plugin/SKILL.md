@@ -1,6 +1,6 @@
 ---
 name: brave-agent
-description: Drive the user's real, logged-in Brave browser on Linux. Use whenever a task means visiting a site the user is signed in to — Gmail, Calendar, Slack, Linear, Shopify, a dashboard, an admin panel — or reading, clicking, filling or screenshotting any web page. Also use when a browser action fails and you need to know why.
+description: Drive the user's real, logged-in Brave browser on Linux. Use whenever a task means visiting a site the user is signed in to (Gmail, Calendar, Slack, Linear, Shopify, a dashboard, an admin panel), or reading, clicking, filling or screenshotting any web page. Also use when a browser action fails and you need to know why.
 ---
 
 # Driving the user's real Brave
@@ -33,8 +33,8 @@ refs survive re-renders far better than CSS selectors on modern SPA markup.
 `mcp__brave__browser_find` searches that tree and returns only matching nodes
 with their refs. Use it to locate one element instead of capturing a whole page.
 
-Screenshot when the question is genuinely about pixels — spacing, alignment,
-colour, whether something is cut off — or before an irreversible submit.
+Screenshot when the question is genuinely about pixels (spacing, alignment,
+colour, whether something is cut off), or before an irreversible submit.
 
 ## Clicking: two servers, and when to switch
 
@@ -56,7 +56,7 @@ chrome-devtools-mcp dispatches over CDP without that gate. Confirmed on Google
 Calendar, Slack's attachment button, and Excalidraw's rename field.
 
 The two servers use **different identifiers**: `[ref=e123]` from brave,
-`uid=1_21` from devtools. They are not interchangeable — snapshot with whichever
+`uid=1_21` from devtools. They are not interchangeable. Snapshot with whichever
 server you are about to act with. A reasonable default is read with brave, click
 with devtools once a click has already refused.
 
@@ -66,7 +66,7 @@ has to find.
 
 ## What devtools adds beyond clicking
 
-Network requests, console messages, performance traces and Lighthouse audits —
+Network requests, console messages, performance traces and Lighthouse audits,
 none of which Playwright MCP exposes. Reach for it when a page is misbehaving
 rather than merely needing to be driven.
 

@@ -1,4 +1,4 @@
-# Acme Inc — Slack identifiers
+# Acme Inc: Slack identifiers
 
 > Example file. Every id, name and address below is invented. Replace with your
 > own, or delete this and write from scratch.
@@ -42,9 +42,9 @@ and when it was confirmed, prevents the same mistake twice.
 The single highest-value entry in a file like this. A name fragment does not
 identify someone, and the agent will guess if you let it.
 
-- **Alex Chen** — title "Research", alex@acme.example, `U00000030`,
+- **Alex Chen**: title "Research", alex@acme.example, `U00000030`,
   DM `D00000031`. Leads the research workshop.
-- **Alex Novak** — display "alex", alex.novak@acme.example, `U00000032`,
+- **Alex Novak**: display "alex", alex.novak@acme.example, `U00000032`,
   DM `D00000033`. A different person entirely, technical contact.
 
 Write down which is which, and instruct the agent to ask rather than guess. A

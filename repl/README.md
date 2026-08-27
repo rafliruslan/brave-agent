@@ -11,7 +11,7 @@ Measured on a live Google Calendar day view:
 
 | | bytes |
 |---|---|
-| Playwright `ariaSnapshot()` | 6717 — and carries no refs, so you cannot act on it |
+| Playwright `ariaSnapshot()` | 6717, and carries no refs, so you cannot act on it |
 | `snapshot` full | 5415 (153 refs, 27ms) |
 | `snapshot` mode `diff` | **227** |
 
@@ -24,13 +24,13 @@ in the stack had it.
 
 ## The disappointment: batching saved nothing
 
-`act` takes a list of typed steps and runs them in one call. On a real task —
-open a menu, pick an item, confirm the dialog — it saved **zero** turns against
+`act` takes a list of typed steps and runs them in one call. On a real task
+(open a menu, pick an item, confirm the dialog) it saved **zero** turns against
 granular tools. Both runs took 8 turns, $0.167 versus $0.154.
 
 The reason generalises: **browser steps are usually data-dependent.** You cannot
 reference the "Out of office" menu item until the menu is open, so no batch can
-span that boundary. Batching only pays when steps are genuinely independent —
+span that boundary. Batching only pays when steps are genuinely independent:
 filling six known form fields, then submitting.
 
 `act` is kept because that case is real, and its tool description now says

@@ -1,4 +1,4 @@
-# You — voice, and writing as you
+# You: voice, and writing as you
 
 > Example file. Replace with your own preferences.
 

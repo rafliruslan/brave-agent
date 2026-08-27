@@ -1,0 +1,15 @@
+[Unit]
+Description=Check hourly for due routines
+
+[Timer]
+# On the hour. The runner decides what is actually due from each routine's own
+# cron line, so this only needs to wake often enough to not miss one.
+#
+# Persistent is deliberately FALSE: a missed run must not fire late. A payout
+# reminder arriving at midnight because the laptop woke up is worse than one
+# that did not arrive.
+OnCalendar=*:00
+Persistent=false
+
+[Install]
+WantedBy=timers.target

@@ -70,7 +70,7 @@ export const DENIED_TOOLS = [
   'mcp__devtools__evaluate_script',
 ];
 
-function buildArgs({ prompt, sessionId, isNew, model, effort, permissionMode, mcpConfig, allowedTools }) {
+function buildArgs({ prompt, sessionId, isNew, model, effort, permissionMode, mcpConfig, allowedTools, deniedTools }) {
   const args = ['-p', prompt, '--output-format', 'json'];
 
   // A new thread ASSIGNS its deterministic id; a continuing thread resumes it.
@@ -91,7 +91,8 @@ function buildArgs({ prompt, sessionId, isNew, model, effort, permissionMode, mc
   // one that does not exist, because it stops her before she tries the browser.
   if (mcpConfig) args.push('--mcp-config', mcpConfig, '--strict-mcp-config');
   if (allowedTools?.length) args.push('--allowedTools', allowedTools.join(' '));
-  args.push('--disallowedTools', DENIED_TOOLS.join(' '));
+  // Callers may narrow further, never widen: the module list is always applied.
+  args.push('--disallowedTools', [...new Set([...DENIED_TOOLS, ...(deniedTools || [])])].join(' '));
 
   return args;
 }
@@ -116,12 +117,13 @@ export function runAgent({
   permissionMode = 'acceptEdits',
   mcpConfig = null,
   allowedTools = null,
+  deniedTools = null,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   bin = 'claude',
   spawnFn = spawn,
 } = {}) {
   return new Promise((resolve) => {
-    const args = buildArgs({ prompt, sessionId, isNew, model, effort, permissionMode, mcpConfig, allowedTools });
+    const args = buildArgs({ prompt, sessionId, isNew, model, effort, permissionMode, mcpConfig, allowedTools, deniedTools });
 
     const child = spawnFn(bin, args, {
       cwd,

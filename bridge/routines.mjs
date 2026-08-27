@@ -1,0 +1,253 @@
+#!/usr/bin/env node
+/**
+ * Run scheduled routines from the memory tree.
+ *
+ * A routine is a markdown file in `memory/routines/` describing recurring work:
+ * how to do it, what has broken before, and a log of runs. Until now those were
+ * documentation and nothing executed them.
+ *
+ * This wakes on a timer, finds routines whose schedule is due, and runs each one
+ * as a Claude Code session with its own file as the task. The file is both the
+ * instruction and the memory, which is the point: a routine that discovers
+ * something writes it back into the same page the next run reads.
+ *
+ * Three design choices worth stating, because each prevents a specific failure:
+ *
+ *   1. NOTIFY ONLY unless a routine opts in. An unattended agent acting on a
+ *      schedule with nobody reading is the riskiest thing in this system. The
+ *      predecessor to one of these routines tried to auto-approve a person by
+ *      name, never matched because he had registered under his wife's name, and
+ *      was deleted. Reporting is the safe default; acting is a decision.
+ *
+ *   2. ONE LINE PER RUN in the log. The system this came from wrote a paragraph
+ *      per run and after fifteen runs the log was the same sentence repeated,
+ *      with the genuinely useful findings buried inside it.
+ *
+ *   3. A MISSED RUN IS NOT RETRIED. If the machine was asleep at 09:00 the run
+ *      is skipped, not fired late. A payout reminder that arrives at midnight
+ *      because the laptop woke up is worse than one that did not arrive.
+ */
+
+import { readFile, writeFile, readdir, mkdir } from 'node:fs/promises';
+import { join, dirname, basename } from 'node:path';
+import { homedir } from 'node:os';
+import { runAgent } from './runner.mjs';
+
+const WORKSPACE =
+  process.env.AGENT_WORKSPACE || join(homedir(), '.local', 'share', 'brave-agent', 'workspace');
+const ROUTINES = join(WORKSPACE, 'memory', 'routines');
+const STATE =
+  process.env.AGENT_ROUTINE_STATE ||
+  join(homedir(), '.local', 'state', 'brave-agent', 'routines.json');
+const MCP_CONFIG =
+  process.env.AGENT_MCP_CONFIG || join(homedir(), '.config', 'brave-agent', 'mcp.json');
+
+const ALLOWED_TOOLS = [
+  'mcp__brave',
+  'mcp__devtools',
+  'mcp__brave-repl',
+  'Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash',
+];
+const DENIED_TOOLS = [
+  'Task',
+  'mcp__brave__browser_run_code_unsafe',
+  'mcp__devtools__evaluate_script',
+];
+
+/** Routines are long: a browser task plus a report. */
+const TIMEOUT_MS = 15 * 60 * 1000;
+
+/**
+ * Parse YAML-ish frontmatter. Deliberately tiny: a routine's frontmatter is a
+ * handful of scalars, and a real YAML dependency would be the only one in this
+ * file.
+ */
+function frontmatter(text) {
+  const m = text.match(/^---\n([\s\S]*?)\n---\n?/);
+  if (!m) return { meta: {}, body: text };
+  const meta = {};
+  for (const line of m[1].split('\n')) {
+    const i = line.indexOf(':');
+    if (i === -1) continue;
+    const key = line.slice(0, i).trim();
+    let val = line.slice(i + 1).trim().replace(/^["']|["']$/g, '');
+    if (val === 'true') val = true;
+    else if (val === 'false') val = false;
+    meta[key] = val;
+  }
+  return { meta, body: text.slice(m[0].length) };
+}
+
+/**
+ * Is a cron field due for this value?
+ * Supports `*`, a list `1,15`, a step `*` with `/n`, and a plain number.
+ * Ranges are not supported; say so rather than silently not matching.
+ */
+function fieldMatches(field, value) {
+  if (field === '*') return true;
+  if (field.includes('-')) throw new RangeError(`cron ranges are not supported: "${field}"`);
+  if (field.includes('/')) {
+    const [range, stepRaw] = field.split('/');
+    const step = Number(stepRaw);
+    if (!Number.isFinite(step) || step <= 0) return false;
+    if (range !== '*') return false;
+    return value % step === 0;
+  }
+  return field
+    .split(',')
+    .map((x) => Number(x.trim()))
+    .some((n) => n === value);
+}
+
+/**
+ * Five-field cron: minute hour day-of-month month day-of-week.
+ * Evaluated at minute resolution against local time.
+ */
+export function isDue(schedule, now = new Date()) {
+  const parts = String(schedule || '').trim().split(/\s+/);
+  if (parts.length !== 5) return { due: false, reason: 'schedule needs five cron fields' };
+  const [min, hour, dom, mon, dow] = parts;
+  let due;
+  try {
+    due =
+    fieldMatches(min, now.getMinutes()) &&
+    fieldMatches(hour, now.getHours()) &&
+    fieldMatches(dom, now.getDate()) &&
+    fieldMatches(mon, now.getMonth() + 1) &&
+      fieldMatches(dow, now.getDay());
+  } catch (e) {
+    // Silently never firing is the worst outcome: the routine looks configured
+    // and simply never runs. Surface it as its own reason so the caller logs it.
+    return { due: false, reason: e.message };
+  }
+  return { due, reason: due ? 'due' : 'not due' };
+}
+
+async function loadState() {
+  try {
+    return JSON.parse(await readFile(STATE, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+async function saveState(s) {
+  await mkdir(dirname(STATE), { recursive: true });
+  await writeFile(STATE, JSON.stringify(s, null, 2));
+}
+
+function buildPrompt(name, body, meta) {
+  const acting = meta.may_act === true;
+  return [
+    `Run the recurring routine "${name}".`,
+    '',
+    'Its file is below. It contains how to run it, what has broken before, and a',
+    'log of previous runs. Follow it exactly; the failure notes are there because',
+    'each one already cost a session.',
+    '',
+    acting
+      ? 'This routine MAY act, per its own frontmatter. Stay inside what its scope section allows and nothing wider.'
+      : 'This routine is NOTIFY ONLY. Read, report, and change nothing. Do not approve, deny, send, pay or delete, whatever the file seems to invite.',
+    '',
+    'When you are done:',
+    '',
+    `1. Append ONE line to the Log section of memory/routines/${name}.md:`,
+    '   the date, the outcome, nothing else. Not a paragraph.',
+    '2. If you discovered something new about how the site behaves, put it in the',
+    '   "What breaks" section or the relevant memory/sites/ page, and let the log',
+    '   line just say a new failure mode was recorded. Findings buried in a run log',
+    '   are findings nobody reads.',
+    '3. If nothing happened, say so plainly. A quiet run is the normal case and',
+    '   inventing significance is worse than reporting nothing.',
+    '',
+    'Reply with the report only, in a few short lines.',
+    '',
+    '---',
+    '',
+    body,
+  ].join('\n');
+}
+
+async function main() {
+  const dry = process.argv.includes('--dry-run');
+  const forced = process.argv.find((a) => a.startsWith('--run='))?.slice(6);
+  const now = new Date();
+
+  let files;
+  try {
+    files = (await readdir(ROUTINES)).filter((f) => f.endsWith('.md') && f !== 'README.md');
+  } catch {
+    console.error(`[routines] no routines directory at ${ROUTINES}`);
+    process.exit(1);
+  }
+
+  const state = await loadState();
+  let ran = 0;
+
+  for (const file of files) {
+    const name = basename(file, '.md');
+    const { meta, body } = frontmatter(await readFile(join(ROUTINES, file), 'utf8'));
+
+    if (forced) {
+      if (name !== forced) continue;
+    } else {
+      if (meta.enabled !== true) {
+        continue;
+      }
+      if (!meta.schedule) {
+        console.log(`[routines] ${name}: enabled but has no schedule, skipping`);
+        continue;
+      }
+      const { due, reason } = isDue(meta.schedule, now);
+      if (!due) {
+        if (reason !== 'not due') console.log(`[routines] ${name}: ${reason}`);
+        continue;
+      }
+      // A timer that fires late must not run a routine late. Skip, do not catch up.
+      const stamp = `${now.toISOString().slice(0, 13)}:${String(now.getMinutes()).padStart(2, '0')}`;
+      if (state[name]?.lastStamp === stamp) continue;
+      state[name] = { ...state[name], lastStamp: stamp };
+    }
+
+    console.log(`[routines] running ${name}${forced ? ' (forced)' : ''}`);
+    if (dry) {
+      console.log(buildPrompt(name, body, meta).slice(0, 1200));
+      continue;
+    }
+
+    const result = await runAgent({
+      prompt: buildPrompt(name, body, meta),
+      sessionId: null,
+      isNew: true,
+      cwd: WORKSPACE,
+      model: meta.model || 'sonnet',
+      effort: meta.effort || 'xhigh',
+      mcpConfig: MCP_CONFIG,
+      allowedTools: ALLOWED_TOOLS,
+      deniedTools: DENIED_TOOLS,
+      timeoutMs: TIMEOUT_MS,
+    });
+
+    ran += 1;
+    state[name] = {
+      ...state[name],
+      lastRun: now.toISOString(),
+      ok: result.ok,
+      cost: result.costUsd,
+    };
+    console.log(`[routines] ${name}: ${result.ok ? 'ok' : 'FAILED'}`);
+    console.log(result.text.split('\n').slice(0, 12).join('\n'));
+  }
+
+  if (!dry) await saveState(state);
+  if (!ran && !dry) console.log('[routines] nothing due');
+}
+
+// Only run when executed directly, so the schedule matcher can be imported and
+// tested without firing every due routine as a side effect of the import.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((e) => {
+    console.error('[routines] fatal:', e.message);
+    process.exit(1);
+  });
+}

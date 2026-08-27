@@ -242,6 +242,23 @@ for that reason.
 saved one. Google Calendar labels an unsaved event `Event is being created.`
 "The click returned success" is not evidence the app accepted it.
 
+**One wedged tab takes down every browser server at once.** Playwright and
+Puppeteer both connect by enabling `Runtime` and `Network` on *every* target and
+waiting for all of them, so a single target that stops answering CDP times out
+every browser call all three servers make. The browser looks perfectly healthy
+from outside: `/json/version` answers in 8ms and every tab renders. Measured 735
+commands on connect, 712 answered, 23 unanswered, all from one stuck Google
+Calendar tab and three of WhatsApp Web's WASM VoIP workers. Clearing those two
+took `connectOverCDP` from a hard 30s timeout to 935ms. `bridge/browser-health.mjs`
+now probes every target before each run and reloads or closes what is wedged.
+
+**An agent that routes around an outage spends its whole budget doing it.** When
+all three servers died, the agent did exactly what it was told to do when a tool
+is refused, which is to find another way, and wrote itself a working CDP client
+in Bash. It was still writing it when the ten minute timeout killed the run. The
+capability was real and the outcome was nothing delivered. Tell it to report an
+infrastructure failure and stop, and fix the infrastructure in code.
+
 ## Read this before installing
 
 **An open debug port means any process running as you can drive your browser,

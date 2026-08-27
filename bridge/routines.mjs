@@ -32,6 +32,7 @@ import { readFile, writeFile, readdir, mkdir } from 'node:fs/promises';
 import { join, dirname, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { runAgent } from './runner.mjs';
+import { healBrowser } from './browser-health.mjs';
 
 const WORKSPACE =
   process.env.AGENT_WORKSPACE || join(homedir(), '.local', 'share', 'brave-agent', 'workspace');
@@ -213,6 +214,15 @@ async function main() {
     if (dry) {
       console.log(buildPrompt(name, body, meta).slice(0, 1200));
       continue;
+    }
+
+    // Same preflight as a Slack turn. A routine runs unattended, so a wedged
+    // browser target here fails silently at 09:00 with nobody watching.
+    try {
+      const health = await healBrowser({});
+      if (health.healed) console.log(`[browser-health] cleared ${health.healed} wedged target(s)`);
+    } catch (err) {
+      console.warn(`[browser-health] preflight failed, continuing: ${err.message}`);
     }
 
     const result = await runAgent({

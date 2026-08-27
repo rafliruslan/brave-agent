@@ -23,6 +23,7 @@ import { fetchThreadContext, composeTask, locationNote } from './thread.mjs';
 import { parseMention, formatResult } from './text.mjs';
 import { buildBlocks } from './blocks.mjs';
 import { runAgent } from './runner.mjs';
+import { healBrowser } from './browser-health.mjs';
 import { pickModel, stripDirective } from './router.mjs';
 
 const { App } = bolt;
@@ -242,6 +243,21 @@ async function main() {
         // If the spawn fails outright no session exists, and the next run's
         // `--resume` reports it gone, which the dead-session path below handles.
         if (isNew) await sessions.set(threadTs, sessionId);
+
+        // Clear any target that has stopped answering CDP before handing over.
+        //
+        // All three browser servers connect by enabling Runtime and Network on
+        // every target, so one wedged target times out every browser call the
+        // agent makes and there is nothing it can do about it from the inside.
+        // Measured 2026-08-27: one stuck Calendar tab and three of WhatsApp
+        // Web's WASM VoIP workers took the whole browser layer down for a full
+        // run. See browser-health.mjs.
+        try {
+          const health = await healBrowser({});
+          if (health.healed) console.log(`[browser-health] cleared ${health.healed} wedged target(s)`);
+        } catch (err) {
+          console.warn(`[browser-health] preflight failed, continuing: ${err.message}`);
+        }
 
         let result = await runAgent({
           prompt: full,

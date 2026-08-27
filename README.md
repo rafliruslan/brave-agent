@@ -365,10 +365,16 @@ that never reaches EOF, and the CLI blocks on it forever rather than exiting.
 Measured: hung past 35s versus 779ms with `stdio: ['ignore','pipe','pipe']`. No
 mocked-spawn unit test catches this.
 
-**Record the placeholder before the run, clear it after.** The bridge posts
-"running…", runs, then edits that message. If the process dies in between,
-nothing is left alive to perform the edit and it says "running…" forever. Found
-after 29 restarts.
+**Record the run before it starts, clear it after.** Whatever says "working"
+has to be unsaid by the same process, and that process can die. The bridge used
+to post a "running…" message and edit the answer into it; after 29 restarts one
+from 12:38 still said "running…" at 21:41.
+
+The progress signal is now a 👀 reaction plus the assistant status line, neither
+of which leaves a message behind, and the answer is posted rather than edited
+in. That removes the litter but not the leak: a dead process still leaves a
+reaction and a status that say a run is in flight. So the record outlives the
+placeholder it was built for, and startup clears both and says what happened.
 
 **Sessions expire underneath you.** Detect it, drop the mapping, silently retry
 in a fresh session. Never show the user an error for this.

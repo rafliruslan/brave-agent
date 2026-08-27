@@ -91,7 +91,6 @@ function channelAllowed(allowed, channel) {
     .includes(channel);
 }
 
-const PLACEHOLDER_TEXT = '⏳ running…';
 
 /**
  * Read the KEY=VALUE env file. Kept out of the repo and out of any transcript;
@@ -178,19 +177,27 @@ async function main() {
   const auth = await app.client.auth.test({ token: SLACK_BOT_TOKEN });
   const botUserId = auth.user_id;
 
-  // Anything still recorded belongs to a process that is already gone, so it
-  // will never be edited by its owner. Found on the Mac after 29 restarts: a
+  // Anything still recorded belongs to a process that is already gone, so
+  // nothing alive will ever finish it. Found on the Mac after 29 restarts: a
   // placeholder from 12:38 still said "running…" at 21:41.
+  //
+  // There is no placeholder to edit now, but the same leak exists in a quieter
+  // form: the 👀 reaction and the assistant status line are both set before the
+  // run and cleared after, so a process that dies in between leaves a thread
+  // that looks like it is still being worked on, forever. Clearing them is the
+  // point of this loop; the message is so it is not silent.
   for (const orphan of await pendingStore.takeAll()) {
     try {
-      await app.client.chat.update({
+      await settle(app.client, { channel: orphan.channel, ts: orphan.ts, ok: false, logger: console });
+      await setStatus(app.client, { channel: orphan.channel, threadTs: orphan.threadTs, status: '', logger: console });
+      await app.client.chat.postMessage({
         token: SLACK_BOT_TOKEN,
         channel: orphan.channel,
-        ts: orphan.ts,
+        thread_ts: orphan.threadTs,
         text: '❌ The bridge restarted while this was running. Ask me again.',
       });
     } catch {
-      // The message may have been deleted; an orphan is not worth crashing for.
+      // The thread may be gone; an orphan is not worth crashing for.
     }
   }
 
@@ -237,21 +244,19 @@ async function main() {
     const prompt = stripDirective(mentioned);
 
     await queue.add(threadTs, async () => {
-      let placeholderTs = null;
       let ok = false;
 
       try {
-        const posted = await client.chat.postMessage({
-          channel,
-          thread_ts: threadTs,
-          text: PLACEHOLDER_TEXT,
-        });
-        placeholderTs = posted.ts;
         // Recorded BEFORE the run, cleared after: that ordering is what makes
-        // "still present at startup" mean "orphaned" and nothing else.
-        await pendingStore.add(channel, placeholderTs, { threadTs });
-        // Visible from the channel list, unlike the reply. Best effort: with
-        // no reactions:write these no-op and the bridge behaves as before.
+        // "still present at startup" mean "orphaned" and nothing else. Keyed
+        // on the triggering message, which is also what carries the reaction.
+        await pendingStore.add(channel, event.ts, { threadTs });
+        // The two progress signals, and there is no longer a third. A
+        // "running…" placeholder used to say the same thing in the one form
+        // that persists, so it had to be edited away afterwards; these do not.
+        // The reaction shows in the channel list, the status inside the thread.
+        // Both are best effort: without the scopes they no-op, and then the
+        // reply arriving is the only signal, which is how this worked before.
         await react(client, { channel, ts: event.ts, name: WORKING, logger: console });
         await setStatus(client, { channel, threadTs, status: 'Working…', logger: console });
         console.log(`[agent] ${threadTs} -> ${route.model}/${route.effort} (${route.reason})`);
@@ -360,32 +365,30 @@ async function main() {
         const body = formatResult(toLegacyResult(result));
         const blocks = buildBlocks(body);
 
-        await client.chat.update({
+        await client.chat.postMessage({
           channel,
-          ts: placeholderTs,
+          thread_ts: threadTs,
           text: body,
           ...(blocks ? { blocks } : {}),
         });
         ok = !/^(❌|⏱|🌐|⚠️)/.test(body);
-          // Follow the thread so the next turn needs no mention.
-          if (ok) await subscriptions.subscribe(threadTs, { channel });
+        // Follow the thread so the next turn needs no mention.
+        if (ok) await subscriptions.subscribe(threadTs, { channel });
       } catch (err) {
         console.error('[agent] run failed:', err);
-        if (placeholderTs) {
-          try {
-            await client.chat.update({
-              channel,
-              ts: placeholderTs,
-              text: `❌ bridge error: ${err.message}`,
-            });
-          } catch {
-            // Nothing further to do; the catch below clears the record.
-          }
+        try {
+          await client.chat.postMessage({
+            channel,
+            thread_ts: threadTs,
+            text: `❌ bridge error: ${err.message}`,
+          });
+        } catch {
+          // Nothing further to do; the finally below clears the record.
         }
       } finally {
         await settle(client, { channel, ts: event.ts, ok, logger: console });
         await setStatus(client, { channel, threadTs, status: '', logger: console });
-        if (placeholderTs) await pendingStore.remove(channel, placeholderTs);
+        await pendingStore.remove(channel, event.ts);
       }
     });
   }

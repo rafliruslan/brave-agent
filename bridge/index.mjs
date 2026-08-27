@@ -25,6 +25,7 @@ import { buildBlocks } from './blocks.mjs';
 import { runAgent } from './runner.mjs';
 import { healBrowser } from './browser-health.mjs';
 import { pickModel, stripDirective } from './router.mjs';
+import { acquire, release } from './lock.mjs';
 
 const { App } = bolt;
 
@@ -339,6 +340,23 @@ async function main() {
       }
     });
   });
+
+  // Refuse to become a second answering bridge. Slack fans app_mention out to
+  // every Socket Mode connection, so a duplicate does not error, it just makes
+  // the agent look like it contradicts itself.
+  const lock = await acquire();
+  if (!lock.ok) {
+    console.error(
+      `[agent] another bridge holds the lock: pid ${lock.holder.pid} on ` +
+      `${lock.holder.host} since ${lock.holder.since}. Refusing to start, because ` +
+      `two bridges answer every mention twice. Stop that one first.`,
+    );
+    process.exit(1);
+  }
+  if (lock.tookOver) console.log('[agent] took over a stale lock from a dead process');
+  for (const sig of ['SIGINT', 'SIGTERM']) {
+    process.on(sig, () => { release().finally(() => process.exit(0)); });
+  }
 
   await app.start();
   console.log(`[agent] connected as ${auth.user} (${botUserId}) in ${auth.team}`);

@@ -105,6 +105,27 @@ first written into the prompt, and the agent still got them wrong often enough t
 matter. They are now deterministic functions applied to every message on the way
 out, which is also what let the persona shrink by 82%.
 
+## Only one bridge at a time
+
+Slack Socket Mode allows several concurrent connections and delivers
+`app_mention` to every one of them. Two bridges therefore answer every mention
+twice, with two agents reaching two different results in the same thread.
+Nothing errors. The agent simply looks like it contradicts itself.
+
+The bridge takes a lock at `~/.local/state/brave-agent/bridge.lock` and refuses
+to start if a live process holds it, naming the pid and host so you know what
+to stop. A lock left by a crash is taken over automatically, so this never
+wedges a restart.
+
+That covers one machine. It cannot see a bridge running elsewhere on the same
+Slack app, so if you move the agent to another box, stop the old one first.
+
+Hooks are not installed by a clone. Run this once per checkout:
+
+```sh
+git config core.hooksPath .githooks
+```
+
 ## How it compares
 
 Written by someone who ported from Aside and read Hermes' docs, not by a

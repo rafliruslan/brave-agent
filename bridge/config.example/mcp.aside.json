@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "aside": {
+      "type": "stdio",
+      "command": "/Users/USERNAME/.local/bin/aside",
+      "args": ["mcp"]
+    }
+  }
+}

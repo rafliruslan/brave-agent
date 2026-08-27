@@ -1,0 +1,97 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { toolPrefixes, allowedTools, browserPrefixes, BASE_TOOLS } from './browser.mjs';
+
+const BRAVE = { mcpServers: { brave: {}, devtools: {}, 'brave-repl': {} } };
+const ASIDE = { mcpServers: { aside: {} } };
+
+test('toolPrefixes names every server in the config', () => {
+  assert.deepEqual(toolPrefixes(BRAVE), ['mcp__brave', 'mcp__devtools', 'mcp__brave-repl']);
+});
+
+// The whole point: the same code produces a different allowlist per machine.
+test('toolPrefixes follows the config to a different browser', () => {
+  assert.deepEqual(toolPrefixes(ASIDE), ['mcp__aside']);
+});
+
+test('toolPrefixes handles a config with no servers', () => {
+  assert.deepEqual(toolPrefixes({ mcpServers: {} }), []);
+  assert.deepEqual(toolPrefixes({}), []);
+  assert.deepEqual(toolPrefixes(null), []);
+  assert.deepEqual(toolPrefixes({ mcpServers: 'nope' }), []);
+});
+
+test('toolPrefixes ignores an empty server name', () => {
+  assert.deepEqual(toolPrefixes({ mcpServers: { '': {}, brave: {} } }), ['mcp__brave']);
+});
+
+test('allowedTools appends the base tools after the browser', async () => {
+  const read = async () => JSON.stringify(ASIDE);
+  assert.deepEqual(await allowedTools('/x', { read }), ['mcp__aside', ...BASE_TOOLS]);
+});
+
+test('allowedTools reads the Brave layer whole', async () => {
+  const read = async () => JSON.stringify(BRAVE);
+  const tools = await allowedTools('/x', { read });
+  assert.ok(tools.includes('mcp__brave'));
+  assert.ok(tools.includes('mcp__devtools'));
+  assert.ok(tools.includes('mcp__brave-repl'));
+});
+
+// Refusing to start would take away the very channel you would use to ask why.
+test('allowedTools survives a missing config and still grants the base tools', async () => {
+  const read = async () => { throw new Error('ENOENT'); };
+  const said = [];
+  assert.deepEqual(await allowedTools('/x', { read, log: (m) => said.push(m) }), BASE_TOOLS);
+  assert.match(said[0], /no browser/);
+});
+
+test('allowedTools survives a corrupt config', async () => {
+  const read = async () => 'not json';
+  const said = [];
+  assert.deepEqual(await allowedTools('/x', { read, log: (m) => said.push(m) }), BASE_TOOLS);
+  assert.match(said[0], /could not read/);
+});
+
+// Silent is the failure mode that matters: --allowedTools is a whitelist, so an
+// unlisted browser is never offered rather than loudly denied.
+test('allowedTools warns when the config parses but names nothing', async () => {
+  const read = async () => '{"mcpServers":{}}';
+  const said = [];
+  await allowedTools('/x', { read, log: (m) => said.push(m) });
+  assert.match(said[0], /no mcpServers/);
+});
+
+test('Bash stays available so the agent can reach a CLI browser directly', () => {
+  assert.ok(BASE_TOOLS.includes('Bash'));
+});
+
+// routines.mjs runs narrower than the bridge; the helper must not widen it.
+test('allowedTools honours a narrower base list', async () => {
+  const read = async () => JSON.stringify(ASIDE);
+  const tools = await allowedTools('/x', { read, base: ['Read', 'Bash'] });
+  assert.deepEqual(tools, ['mcp__aside', 'Read', 'Bash']);
+  assert.ok(!tools.includes('WebSearch'));
+});
+
+test('browserPrefixes returns the browser half alone', async () => {
+  const read = async () => JSON.stringify(BRAVE);
+  assert.deepEqual(await browserPrefixes('/x', { read }), ['mcp__brave', 'mcp__devtools', 'mcp__brave-repl']);
+});
+
+// Caught during the port: config.example/mcp.json was written from the plugin's
+// two servers and silently dropped brave-repl, which the hardcoded list had.
+// --allowedTools is a whitelist, so that loses the diff-snapshot server with no
+// error anywhere. The shipped Linux config must still name all three.
+test('the shipped Linux config yields the tools the hardcoded list had', async () => {
+  const tools = await allowedTools(new URL('./config.example/mcp.json', import.meta.url).pathname);
+  for (const t of ['mcp__brave', 'mcp__devtools', 'mcp__brave-repl']) {
+    assert.ok(tools.includes(t), `${t} missing from config.example/mcp.json`);
+  }
+});
+
+test('the shipped macOS config attaches Aside', async () => {
+  const tools = await allowedTools(new URL('./config.example/mcp.aside.json', import.meta.url).pathname);
+  assert.ok(tools.includes('mcp__aside'));
+  assert.ok(!tools.includes('mcp__brave'), 'the macOS layer must not also attach Brave');
+});

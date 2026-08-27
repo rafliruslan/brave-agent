@@ -32,6 +32,7 @@ import { readFile, writeFile, readdir, mkdir } from 'node:fs/promises';
 import { join, dirname, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { runAgent } from './runner.mjs';
+import { allowedTools } from './browser.mjs';
 import { healBrowser } from './browser-health.mjs';
 
 const WORKSPACE =
@@ -43,12 +44,13 @@ const STATE =
 const MCP_CONFIG =
   process.env.AGENT_MCP_CONFIG || join(homedir(), '.config', 'brave-agent', 'mcp.json');
 
-const ALLOWED_TOOLS = [
-  'mcp__brave',
-  'mcp__devtools',
-  'mcp__brave-repl',
-  'Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash',
-];
+/**
+ * Narrower than the bridge on purpose: no WebFetch, no WebSearch. An unattended
+ * run at 03:00 has nobody to sanity-check what it read on the open web before
+ * acting on it. The browser half comes from the MCP config, same as the bridge,
+ * so a routine drives whichever browser this machine has. See browser.mjs.
+ */
+const ROUTINE_BASE = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'];
 const DENIED_TOOLS = [
   'Task',
   'mcp__brave__browser_run_code_unsafe',
@@ -233,7 +235,7 @@ async function main() {
       model: meta.model || 'sonnet',
       effort: meta.effort || 'xhigh',
       mcpConfig: MCP_CONFIG,
-      allowedTools: ALLOWED_TOOLS,
+      allowedTools: await allowedTools(MCP_CONFIG, { base: ROUTINE_BASE }),
       deniedTools: DENIED_TOOLS,
       timeoutMs: TIMEOUT_MS,
     });

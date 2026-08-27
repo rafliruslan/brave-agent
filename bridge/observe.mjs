@@ -27,7 +27,17 @@ import { homedir } from 'node:os';
 
 const run = promisify(execFile);
 
+/**
+ * Any Chromium history database. Aside is Chromium too, so the same query works
+ * against `~/Library/Application Support/Aside/Default/History` on macOS
+ * (verified: same `urls` and `visits` schema) with only this path changed.
+ *
+ * BRAVE_HISTORY_DB still works; it was the name before the agent drove anything
+ * but Brave, and silently ignoring an already-configured machine's variable is
+ * a worse trade than carrying one alias.
+ */
 const HISTORY =
+  process.env.AGENT_HISTORY_DB ||
   process.env.BRAVE_HISTORY_DB ||
   join(homedir(), '.local', 'share', 'brave-profile', 'Default', 'History');
 

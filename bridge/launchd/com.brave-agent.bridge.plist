@@ -31,6 +31,13 @@
         <string>production</string>
         <key>AGENT_PERSONA_PATH</key>
         <string>/Users/USERNAME/.config/brave-agent/persona.md</string>
+        <!--
+          On macOS the browser layer is Aside, not Brave, so mcp.json is the
+          copy of config.example/mcp.aside.json and the history observer reads
+          Aside's Chromium profile. Same schema, different path.
+        -->
+        <key>AGENT_HISTORY_DB</key>
+        <string>/Users/USERNAME/Library/Application Support/Aside/Default/History</string>
     </dict>
     <key>RunAtLoad</key>
     <true/>

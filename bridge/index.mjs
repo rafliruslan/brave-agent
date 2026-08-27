@@ -28,6 +28,7 @@ import { pickModel, stripDirective } from './router.mjs';
 import { acquire, release } from './lock.mjs';
 import { react, settle, setStatus, WORKING } from './status.mjs';
 import { createSubscriptionStore, shouldHandle, isStopPhrase } from './subscriptions.mjs';
+import { allowedTools, BASE_TOOLS } from './browser.mjs';
 
 const { App } = bolt;
 
@@ -38,29 +39,40 @@ const MCP_CONFIG = process.env.AGENT_MCP_CONFIG || join(homedir(), '.config', 'b
 /**
  * Tools the agent may use without being asked.
  *
- * `mcp__brave` and `mcp__devtools` allow the whole browser surface: the
- * accessibility snapshot with refs, navigation, clicking, typing, screenshots.
+ * The browser half is derived from the MCP config at startup rather than named
+ * here, because which browser the agent drives is a deployment choice: Brave
+ * over CDP on Linux, Aside on macOS. See browser.mjs.
  *
  * What bounds the agent is the workspace cwd and the denied tools, not a
  * per-action prompt. There is no human at a headless run to answer one, and a
  * denial surfaces as an honest refusal in Slack rather than a stall.
+ *
+ * Resolved once at startup, not per message: re-reading the file on every
+ * mention would let a half-written edit disarm the browser mid-conversation.
+ *
+ * Why the Linux config names three servers, kept here because the measurements
+ * are the reason and a JSON file cannot hold them:
+ *
+ *   `brave`      Playwright. The whole browser surface: accessibility snapshot
+ *                with refs, navigation, clicking, typing, screenshots.
+ *
+ *   `devtools`   chrome-devtools-mcp, on the same CDP endpoint. Added because
+ *                Playwright's click has an actionability gate that Google
+ *                Calendar never satisfies: the ref resolves but "stable" never
+ *                passes on its animating containers. Measured 2026-08-25, same
+ *                button, same page: playwright `browser_click` failed three
+ *                times; devtools click succeeded on the first attempt.
+ *
+ *   `brave-repl` the same browser again, but its snapshot returns a DIFF.
+ *                Measured on Google Calendar: 5415 bytes for the full tree
+ *                against 227 for the diff after opening a menu. Re-reading a
+ *                page is the most repeated thing the agent does, so this is
+ *                where the tokens are.
+ *
+ * Aside exposes one tool instead of these three. See browser.mjs and the
+ * safety note on DENIED_TOOLS in runner.mjs.
  */
-const ALLOWED_TOOLS = [
-  'mcp__brave',
-  // chrome-devtools-mcp, on the same CDP endpoint as `brave`. Added because
-  // Playwright's click has an actionability gate that Google Calendar never
-  // satisfies: the ref resolves but "stable" never passes on its animating
-  // containers. Measured 2026-08-25, same button, same page: playwright
-  // `browser_click` failed three times; devtools click returned "Successfully
-  // clicked on the element" on the first attempt.
-  'mcp__devtools',
-  // brave-repl: the same browser again, but its snapshot returns a DIFF.
-  // Measured on Google Calendar: 5415 bytes for the full tree against 227 for
-  // the diff after opening a menu. Re-reading a page is the most repeated thing
-  // the agent does, so this is where the tokens are.
-  'mcp__brave-repl',
-  'Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebFetch', 'WebSearch',
-];
+let ALLOWED_TOOLS = BASE_TOOLS;
 
 /** Threads run one at a time; this caps how many threads run together. */
 const DEFAULT_CONCURRENCY = 3;
@@ -146,6 +158,12 @@ async function main() {
   if (!ALLOWED_USER) {
     throw new Error(`ALLOWED_USER must be set in ${ENV_PATH}; it is the only access control`);
   }
+
+  // Which browser is attached, read once. A warning rather than a throw: losing
+  // the browser should not cost you the channel you would use to ask about it.
+  ALLOWED_TOOLS = await allowedTools(MCP_CONFIG);
+  const browsers = ALLOWED_TOOLS.filter((t) => t.startsWith('mcp__'));
+  console.log(`[browser] ${browsers.length ? browsers.join(', ') : 'none attached'} (from ${MCP_CONFIG})`);
 
   const app = new App({
     token: SLACK_BOT_TOKEN,

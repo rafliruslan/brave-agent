@@ -1,19 +1,19 @@
 # brave-agent
 
-An agentic browser for Linux and macOS. Tag it in Slack, it works in the
-browser you are already signed in to.
+Tag it in Slack, it works in the browser you are already signed in to. Runs on
+Linux and macOS, billed to a Claude subscription rather than per token.
 
-A portable alternative to [Aside](https://aside.com) and a browser-first
-counterpart to [Hermes Agent](https://github.com/NousResearch/hermes-agent),
-assembled from Claude Code, your real Brave, and about 1400 lines of bridge.
+Built because [Aside](https://aside.com) is macOS-only and
+[Hermes Agent](https://github.com/NousResearch/hermes-agent) runs anywhere but
+has no first-class browser, and its Claude path needs a Max plan with purchased
+extra credits. This is Claude Code, your real browser, and about 1500 lines of
+bridge in between.
 
-Aside is macOS-only. Hermes runs anywhere but has no first-class browser, and
-its Claude path needs a Max plan with purchased extra credits. This fills the
-gap in between: your real logged-in browser, on either OS, billed to a Claude
-subscription rather than per token.
-
-It started as a Linux escape hatch from Aside. It kept the macOS half so that
-moving between the two machines does not mean maintaining two agents.
+On Linux that browser is Brave over CDP, which was the whole reason this exists.
+On macOS it is Aside, driven through its MCP server, because Aside is the better
+browser when you can have it. The bridge does not know the difference: which
+browser is attached is one JSON file. That is what keeps it one agent to
+maintain instead of two.
 
 It is smaller and less capable than either. [How it compares](#how-it-compares),
 honestly, below.
@@ -157,6 +157,7 @@ benchmark. Take the "worse" rows seriously.
 | | **brave-agent** | **Aside** | **Hermes Agent** |
 |---|---|---|---|
 | Platform | Linux, macOS | **macOS only** | anywhere |
+| Browser layer | Brave (Linux), Aside (macOS) | its own | not a focus |
 | Licence | MIT | commercial | open source |
 | Browser | first-class, real profile | **first-class, real profile** | not a focus |
 | Billing on Claude | **subscription** (`claude -p`) | subscription | Max + purchased extra credits, or per-token API |
@@ -214,17 +215,29 @@ switching OS, this is the shape of it.
 
 ```bash
 # 1. Browser layer
+#    Linux: Brave over CDP
 /plugin marketplace add rafliruslan/brave-agent
 /plugin install brave-agent
 /brave-setup
 
+#    macOS: Aside. Nothing to set up beyond having it installed and signed in;
+#    `aside mcp` is the whole integration.
+aside --version
+
 # 2. Harness
 git clone https://github.com/rafliruslan/brave-agent ~/.local/share/brave-agent
 cd ~/.local/share/brave-agent/bridge && npm install
+(cd ../repl && npm install)                # Linux only: the diff-snapshot server
 
 mkdir -p ~/.config/brave-agent
-cp config.example/* ~/.config/brave-agent/
+cp config.example/env ~/.config/brave-agent/
 chmod 600 ~/.config/brave-agent/env        # then fill in your tokens
+
+# Pick the browser layer. This file IS the choice of browser.
+sed "s|/home/USERNAME|$HOME|" config.example/mcp.json \
+  > ~/.config/brave-agent/mcp.json                                  # Linux, Brave
+sed "s|/Users/USERNAME|$HOME|" config.example/mcp.aside.json \
+  > ~/.config/brave-agent/mcp.json                                  # macOS, Aside
 
 # 3. Keep it running (pick your platform)
 
@@ -234,7 +247,7 @@ systemctl --user daemon-reload
 systemctl --user enable --now brave-agent
 
 # macOS
-sed "s|/Users/USERNAME|$HOME|g" bridge/launchd/com.brave-agent.bridge.plist \
+sed "s|/Users/USERNAME|$HOME|g" launchd/com.brave-agent.bridge.plist \
   > ~/Library/LaunchAgents/com.brave-agent.bridge.plist
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.brave-agent.bridge.plist
 ```
@@ -275,42 +288,73 @@ assistant and only works inside assistant threads. The bridge calls it anyway
 and ignores the refusal, so turning the Agents feature on later lights it up
 with no code change.
 
-## It runs the same on Linux and macOS
+## One agent, two machines, two browsers
 
-Nothing in the bridge or the REPL is written against an OS. Every path is
-`homedir()` plus an XDG-shaped suffix, which is a plain directory on macOS too,
-and the browser layer talks to `127.0.0.1:9222` over CDP, which does not care
-what started the browser. `node --test` passes on both.
+The bridge does not know what a browser is. It runs `claude -p` with an
+`--mcp-config`, and whatever servers that file names are the browser. So the
+same clone, the same persona, the same memory repo and the same Slack app run on
+both machines, and the thing that differs is one JSON file.
 
-Two things genuinely differ, and both are one file each:
+| | Linux | macOS |
+|---|---|---|
+| browser | Brave, driven over CDP | [Aside](https://aside.com) |
+| MCP config | `config.example/mcp.json` | `config.example/mcp.aside.json` |
+| browser tools | `brave`, `devtools`, `brave-repl` | `aside` |
+| service | `bridge/systemd/` | `bridge/launchd/` |
+| history db | `~/.local/share/brave-profile/Default/History` | `~/Library/Application Support/Aside/Default/History` |
 
-**Service manager.** `bridge/systemd/` holds the Linux units,
-`bridge/launchd/` the macOS agents with the same names and the same jobs. The
-launchd plists carry hardcoded paths with `USERNAME` in them, because launchd
-expands neither `~` nor `$HOME`, so they are written to be `sed`-ed once at
-install. `ThrottleInterval` stands in for `StartLimitBurst`: same purpose, which
-is stopping a crash loop from reconnecting faster than the single-instance lock
-can settle.
+Nothing else in the bridge or the REPL is written against an OS. Every path is
+`homedir()` plus an XDG-shaped suffix, which is a plain directory on macOS too.
+`node --test` passes 127/127 on both.
 
-There is no launchd timer unit, so `brave-agent-dream.timer` and
-`brave-agent-routines.timer` become `StartInterval` seconds on the job itself.
-That loses the systemd `Persistent=true` behaviour, where a timer missed while
-the machine was asleep fires on wake. On macOS a `StartInterval` job that comes
-due while asleep runs once at wake, which is close enough for a memory
-consolidation pass and worth knowing about for anything that must not be skipped.
+### The allowlist is derived, not written down
 
-**Browser flags.** On Arch, `/usr/bin/brave` sources `brave-flags.conf`, so
-every launcher inherits the debug port. macOS has no such file: LaunchServices
-starts the app bundle directly, so a Dock or Spotlight launch passes no
-arguments and the port silently does not open. `/brave-setup` handles this with
-a login-time launchd agent plus a `~/.local/bin/brave` wrapper, and says so out
-loud, because the failure mode is a port that is simply absent with no error
-anywhere.
+`--allowedTools` is a whitelist, and its failure mode is silent: an unlisted
+tool is not denied loudly, it is simply never offered. A hardcoded `mcp__brave`
+list therefore leaves the agent on the other machine with no browser and no
+error to explain it. So `browser.mjs` reads the MCP config and allows
+`mcp__<server>` for whatever it finds. `--strict-mcp-config` means that file is
+exactly the set of servers that will exist, so the two cannot drift.
 
-The Chromium 136+ rule that `--remote-debugging-port` is refused at the default
-profile path applies on both, so the profile moves to
-`~/.local/share/brave-profile` either way and every other path in the repo lines
-up unchanged.
+Aside's history database is Chromium's, same `urls` and `visits` schema, so the
+observer works unchanged with `AGENT_HISTORY_DB` pointed at it.
+`BRAVE_HISTORY_DB` still works as an alias.
+
+### Where the macOS setup is less safe, plainly
+
+On Linux the agent gets granular browser tools and the one that runs arbitrary
+JavaScript is denied in code, after it escalated to raw JS against a half-open
+Google Calendar dialog and left a ghost event behind.
+
+`aside mcp` exposes exactly one tool, `repl`, which executes arbitrary
+JavaScript against the live logged-in browser. There is no granular
+`click(ref)` to allow instead. Denying it leaves the agent with no browser;
+allowing it grants exactly the capability that was removed on Linux. That is
+not a setting, it is the shape of the API.
+
+So on macOS the guardrail is the workspace cwd, the single allowed Slack user,
+and a human reading every reply. It is a real reduction against the Linux
+setup, and worth knowing which machine you are talking to.
+
+### Service manager
+
+`bridge/systemd/` and `bridge/launchd/` hold the same jobs under both names. The
+plists hardcode paths with `USERNAME` in them, because launchd expands neither
+`~` nor `$HOME`, so they are meant to be `sed`-ed once at install.
+`ThrottleInterval` stands in for `StartLimitBurst`, guarding the same thing: a
+crash loop reconnecting faster than the single-instance lock can settle would
+have Slack delivering every mention to two bridges.
+
+launchd has no timer unit, so the dream and routines timers become
+`StartInterval` seconds on the job. That drops systemd's `Persistent=true`,
+where a timer missed while the machine was asleep fires on wake. On macOS a
+`StartInterval` job that comes due while asleep runs once at wake, which is
+close enough for a memory pass and worth knowing for anything that must not be
+skipped.
+
+`/brave-setup` also documents running Brave on macOS, for anyone who wants that
+instead of Aside. The Chromium 136+ refusal to open a debug port at the default
+profile path applies on both platforms.
 
 ## Things that took a day each
 

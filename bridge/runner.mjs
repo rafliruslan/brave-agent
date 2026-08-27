@@ -70,6 +70,23 @@ const SESSION_IN_USE = /session id .* is already in use/i;
  *                                   above. Denied for the same reason, so
  *                                   adding a second browser server does not
  *                                   quietly reopen the door we just shut.
+ *
+ * Aside, the macOS browser layer, cannot be constrained this way and it is
+ * worth being blunt about it. `aside mcp` exposes exactly one tool, `repl`,
+ * which executes arbitrary JavaScript against the live logged-in browser. There
+ * is no granular `click(ref)` to allow instead, so the capability these two
+ * entries exist to remove IS the entire API. Denying it would leave the agent
+ * with no browser; allowing it grants, on that machine, precisely what was
+ * taken away on the other one.
+ *
+ * So the guardrail on macOS is not the tool list. It is the workspace cwd, the
+ * single allowed Slack user, and the fact that a human reads every reply. That
+ * is a real reduction in safety against the Linux setup, and someone running
+ * both should know which machine they are talking to.
+ *
+ * The two Brave entries stay listed on both. They cost nothing when the server
+ * is absent, and leaving them means attaching Brave later cannot quietly reopen
+ * a door that was shut deliberately.
  */
 export const DENIED_TOOLS = [
   'Task',

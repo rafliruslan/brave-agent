@@ -266,6 +266,7 @@ async function main() {
           threadTs,
           botUserId,
           skipTs: event.ts,
+          allowedUser: ALLOWED_USER,
         });
 
         const existing = await sessions.get(threadTs);

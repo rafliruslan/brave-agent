@@ -58,8 +58,24 @@ const DEEP = [
   'across all', 'every channel', 'trace',
 ];
 
+/**
+ * Match on whole words, not substrings.
+ *
+ * A bare `includes()` made the two-letter tokens catastrophic: "ui" matched
+ * inside quick, build, guide, require and suit, so "quick check: what's on my
+ * calendar tomorrow" routed to Opus as a visual task. Measured in production
+ * 2026-08-27, and invisible because the wrong model still answers correctly, it
+ * just costs more and runs slower.
+ *
+ * Multi-word phrases still work: the boundary applies at each end of the phrase,
+ * not between its words.
+ */
 function matches(haystack, needles) {
-  return needles.find((n) => haystack.includes(n)) || null;
+  for (const n of needles) {
+    const escaped = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`\\b${escaped}\\b`, 'i').test(haystack)) return n;
+  }
+  return null;
 }
 
 /**

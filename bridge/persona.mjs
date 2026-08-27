@@ -44,8 +44,15 @@ These are not optional:
 function load() {
   try {
     const text = readFileSync(PERSONA_PATH, 'utf8').trim();
-    return text ? `${text}\n` : FALLBACK;
+    if (text) return `${text}\n`;
+    console.warn(`[persona] ${PERSONA_PATH} is empty, using the neutral fallback`);
+    return FALLBACK;
   } catch {
+    // Say so. This fallback is competent enough to go unnoticed: after the live
+    // install moved from a hardcoded persona to this file, the agent ran without
+    // its character for sixteen hours and nobody spotted it, because the replies
+    // were still good. A good fallback needs to announce itself.
+    console.warn(`[persona] no persona at ${PERSONA_PATH}, using the neutral fallback`);
     return FALLBACK;
   }
 }

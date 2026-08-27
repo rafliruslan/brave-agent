@@ -6,7 +6,8 @@
   "description": "Slack Socket Mode bridge: mention an agent, it drives your real Brave via Claude Code",
   "main": "index.mjs",
   "scripts": {
-    "start": "node index.mjs"
+    "start": "node index.mjs",
+    "test": "node --test"
   },
   "dependencies": {
     "@slack/bolt": "^4.2.0"

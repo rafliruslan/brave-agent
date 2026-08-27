@@ -18,7 +18,12 @@
 bad=$(git diff --cached --name-only --diff-filter=ACM \
       | while read -r f; do
           [ -f "$f" ] || continue
-          case "$f" in node_modules/*|*.png|*.jpg|*.jpeg|*.gif|*.pdf|*.ico) continue ;; esac
+          # The leading "(" is load-bearing. Without it the pattern's closing
+          # ")" terminates the enclosing $( ... ), and this whole hook dies
+          # with "syntax error near unexpected token ';;'" before it checks
+          # anything. Which is exactly the silent non-enforcement this file
+          # was written to fix.
+          case "$f" in (node_modules/*|*.png|*.jpg|*.jpeg|*.gif|*.pdf|*.ico) continue ;; esac
           # A line may keep an em dash by saying so: bridge/text.mjs is the
           # function that strips them, and cannot do that without one.
           if git show ":$f" 2>/dev/null | grep '—' | grep -qv 'em-dash-ok'; then

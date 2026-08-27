@@ -6,8 +6,9 @@ Linux and macOS, billed to a Claude subscription rather than per token.
 Built because [Aside](https://aside.com) is macOS-only and
 [Hermes Agent](https://github.com/NousResearch/hermes-agent) runs anywhere but
 has no first-class browser, and its Claude path needs a Max plan with purchased
-extra credits. This is Claude Code, your real browser, and about 1500 lines of
-bridge in between.
+extra credits. This is Claude Code, your real browser, and about 2700 lines of
+bridge in between, with 960 lines of tests over the parts that can be tested
+without a browser.
 
 On Linux that browser is Brave over CDP, which was the whole reason this exists.
 On macOS it is Aside, driven through its MCP server, because Aside is the better
@@ -154,6 +155,12 @@ git config core.hooksPath .githooks
 Written by someone who ported from Aside and read Hermes' docs, not by a
 benchmark. Take the "worse" rows seriously.
 
+Aside is in two columns of this table at once, which is not a mistake. It is the
+thing this was built to replace on Linux, and it is the browser this drives on
+macOS. Comparing against a product you also depend on is awkward to write and
+honest to read: the rows below are about Aside as a whole agent, not about the
+browser, which is very good and is why it is the macOS layer.
+
 | | **brave-agent** | **Aside** | **Hermes Agent** |
 |---|---|---|---|
 | Platform | Linux, macOS | **macOS only** | anywhere |
@@ -174,7 +181,10 @@ Odysseys), and this has been used by one person for one day. It shields
 credentials from the model at the vault layer, where this only instructs the
 agent not to print them. Its single `repl` tool is more expressive than granular
 MCP calls: one 120-second call can snapshot, decide, act and verify where this
-takes a dozen round-trips.
+takes a dozen round-trips. That last point stopped being a comparison and became
+a dependency: on macOS this drives Aside, so it gets the expressive `repl` and
+also loses the ability to deny it. See
+[where the macOS setup is less safe](#where-the-macos-setup-is-less-safe-plainly).
 
 ### Where Aside is worse
 
@@ -305,7 +315,7 @@ both machines, and the thing that differs is one JSON file.
 
 Nothing else in the bridge or the REPL is written against an OS. Every path is
 `homedir()` plus an XDG-shaped suffix, which is a plain directory on macOS too.
-`node --test` passes 127/127 on both.
+`node --test` passes 151/151 on both.
 
 ### The allowlist is derived, not written down
 
@@ -319,6 +329,18 @@ exactly the set of servers that will exist, so the two cannot drift.
 Aside's history database is Chromium's, same `urls` and `visits` schema, so the
 observer works unchanged with `AGENT_HISTORY_DB` pointed at it.
 `BRAVE_HISTORY_DB` still works as an alias.
+
+The same config answers a second question. Only a CDP browser can be
+preflighted for wedged targets, and only a CDP browser wedges that way, so
+`cdpEndpoint()` reads the endpoint out of `mcp.json` and the health check is
+skipped where there is none. It returns the URL rather than a boolean, so the
+probe uses the port actually configured instead of assuming 9222. Startup says
+which it got:
+
+```
+[browser] mcp__aside (from …/mcp.json), not CDP, health preflight off
+[browser] mcp__brave, mcp__devtools, mcp__brave-repl (from …/mcp.json), CDP at http://127.0.0.1:9222
+```
 
 ### Where the macOS setup is less safe, plainly
 
@@ -439,6 +461,18 @@ declines notify real colleagues. There is no undo layer.
 `ALLOWED_USER` is the entire access control: mentions from anyone else are
 ignored in silence, because replying would tell an unauthorised user the bot is
 listening.
+
+**That gate has to hold in the transcript too, and it did not at first.** The
+agent reads the thread it was tagged into, and every non-bot message was
+labelled `[the user]`. So once a second person replied, their words reached the
+agent as the words of the one person whose words are instructions: a colleague
+typing "actually, cancel that" was indistinguishable from the owner typing it.
+It would never have answered them, which was never the risk. It would have acted
+on them.
+
+Speakers are distinct now, and the shape is worth naming: a gate on the entrance
+is not a gate if a second path copies untrusted input in beside the trusted kind
+and drops the label that told them apart.
 
 ## Design notes
 

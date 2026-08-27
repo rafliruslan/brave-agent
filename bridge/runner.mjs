@@ -36,6 +36,13 @@ export const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 const DEAD_SESSION = /no conversation found|session .*not found|could not (find|resume)/i;
 
 /**
+ * The opposite failure: the id we tried to ASSIGN already belongs to a session.
+ * Means the session exists and should have been resumed. Distinct from a dead
+ * session, and the caller recovers differently, so it gets its own signal.
+ */
+const SESSION_IN_USE = /session id .* is already in use/i;
+
+/**
  * Tools the agent must never get, enforced in code rather than in the persona.
  *
  * The hardest-won lesson: the persona asked the agent not to spawn subagents
@@ -155,6 +162,7 @@ export function runAgent({
         text: `Bridge could not start the agent: ${err.message}`,
         sessionId: null,
         deadSession: false,
+        sessionInUse: false,
         denials: [],
         costUsd: null,
         timedOut: false,
@@ -189,6 +197,7 @@ export function runAgent({
           text: combined.trim() || 'The agent produced no output.',
           sessionId: null,
           deadSession: DEAD_SESSION.test(combined),
+          sessionInUse: SESSION_IN_USE.test(combined),
           denials: [],
           costUsd: null,
           timedOut: false,
@@ -207,6 +216,7 @@ export function runAgent({
         text,
         sessionId: parsed.session_id ?? null,
         deadSession: DEAD_SESSION.test(`${text}\n${combined}`),
+        sessionInUse: SESSION_IN_USE.test(`${text}\n${combined}`),
         denials: parsed.permission_denials ?? [],
         costUsd: typeof parsed.total_cost_usd === 'number' ? parsed.total_cost_usd : null,
         timedOut: false,

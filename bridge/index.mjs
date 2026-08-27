@@ -229,6 +229,20 @@ async function main() {
           .filter(Boolean)
           .join('');
 
+        // Record the mapping BEFORE the run, not after a successful one.
+        //
+        // Claude Code creates the session the moment it starts, whatever the
+        // outcome. Recording only on success meant a run that timed out left no
+        // mapping, so the next message in that thread saw no session, assigned
+        // the same deterministic id again, and hit a session that already
+        // existed. Seen in production 2026-08-27, two messages after a ten
+        // minute timeout: "Session ID de620be8-a781-4d68-8831-35a44e0555b7 is
+        // already in use."
+        //
+        // If the spawn fails outright no session exists, and the next run's
+        // `--resume` reports it gone, which the dead-session path below handles.
+        if (isNew) await sessions.set(threadTs, sessionId);
+
         let result = await runAgent({
           prompt: full,
           sessionId,
@@ -239,6 +253,23 @@ async function main() {
           mcpConfig: MCP_CONFIG,
           allowedTools: ALLOWED_TOOLS,
         });
+
+        // Belt and braces for the same failure arriving another way: if the id
+        // is taken, the session exists and we should have resumed it.
+        if (!result.ok && result.sessionInUse) {
+          console.log(`[agent] ${sessionId} already exists; resuming instead`);
+          await sessions.set(threadTs, sessionId);
+          result = await runAgent({
+            prompt: task + '\n\n---\n\n' + note,
+            sessionId,
+            isNew: false,
+            cwd: WORKSPACE,
+            model: route.model,
+            effort: route.effort,
+            mcpConfig: MCP_CONFIG,
+            allowedTools: ALLOWED_TOOLS,
+          });
+        }
 
         // A resumed session that is gone never recovers. Release the thread and
         // silently retry in a fresh one rather than showing the user an error.

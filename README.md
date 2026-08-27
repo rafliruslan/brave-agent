@@ -239,6 +239,13 @@ sed "s|/Users/USERNAME|$HOME|g" bridge/launchd/com.brave-agent.bridge.plist \
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.brave-agent.bridge.plist
 ```
 
+`config.example/mcp.json` repeats what the plugin already registers, and has
+to. The bridge runs `claude -p` with `--strict-mcp-config`, which loads only the
+file it is handed and ignores everything else configured, so the bridge needs
+its own copy of the two server definitions. That flag is deliberate: it is what
+stops the agent seeing a tool it will then be denied, which reads to it as "I
+need permission" and stops it before it tries the browser.
+
 The agent's `workspace/` ships inside the clone and is used in place. Copy it
 somewhere else and set `AGENT_WORKSPACE` only if you want the repo to stay
 pristine while the agent writes its own memory.

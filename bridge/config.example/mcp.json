@@ -1,32 +1,12 @@
 {
   "mcpServers": {
     "brave": {
-      "type": "stdio",
       "command": "npx",
-      "args": [
-        "-y",
-        "@playwright/mcp@latest",
-        "--cdp-endpoint",
-        "http://127.0.0.1:9222"
-      ],
-      "env": {}
+      "args": ["-y", "@playwright/mcp@latest", "--cdp-endpoint", "http://127.0.0.1:9222"]
     },
     "devtools": {
-      "type": "stdio",
       "command": "npx",
-      "args": [
-        "-y",
-        "chrome-devtools-mcp@latest",
-        "--browserUrl",
-        "http://127.0.0.1:9222",
-        "--screenshotFormat",
-        "jpeg",
-        "--screenshotQuality",
-        "60",
-        "--screenshotMaxWidth",
-        "1400"
-      ],
-      "env": {}
+      "args": ["-y", "chrome-devtools-mcp@latest", "--browserUrl", "http://127.0.0.1:9222"]
     }
   }
 }

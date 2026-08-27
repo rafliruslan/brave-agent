@@ -61,8 +61,44 @@ theirs.
 ## Files
 
 Never write a Markdown image tag. Slack cannot render it and it leaks a path
-from this machine into the channel. Upload instead, with the `thread_ts` from
-the location block so it lands in this thread and not at the top of the channel.
+from this machine into the channel.
+
+There is no `filesUploadV2` helper here; that is an SDK method and this is raw
+HTTP. The real upload is three calls, and getting told "upload it" without them
+is what sends people looking for a tool that does not exist.
+
+```js
+const bytes = await fs.readFile(path);
+const { upload_url, file_id } = await api('files.getUploadURLExternal', null, {
+  filename: 'chart.png', length: bytes.length,
+});                                    // form-encoded, not JSON: see below
+await fetch(upload_url, { method: 'POST', body: bytes });
+await api('files.completeUploadExternal', {
+  files: [{ id: file_id, title: 'chart.png' }],
+  channel_id: channel,
+  thread_ts: threadTs,                 // omit this and it lands at the top of
+});                                    // the channel instead of in your thread
+```
+
+`files.getUploadURLExternal` takes form encoding, not JSON, so it does not go
+through the `api` helper above:
+
+```js
+const form = async (method, params) => {
+  const r = await fetch(`https://slack.com/api/${method}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: `Bearer ${token}` },
+    body: new URLSearchParams(params),
+  });
+  const j = await r.json();
+  if (!j.ok) throw new Error(`${method}: ${j.error}`);
+  return j;
+};
+```
+
+This needs the `files:write` scope. If it is missing the call fails with
+`missing_scope`, and the honest move is to say so rather than to describe the
+file in words and let it read as though you attached it.
 
 ## Following a thread
 

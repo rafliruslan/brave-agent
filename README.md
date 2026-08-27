@@ -105,6 +105,26 @@ first written into the prompt, and the agent still got them wrong often enough t
 matter. They are now deterministic functions applied to every message on the way
 out, which is also what let the persona shrink by 82%.
 
+## It follows a thread once it has answered
+
+A mention is a good way to start a conversation and a poor way to continue one.
+After the agent replies in a thread it follows that thread, so the next reply
+reaches it with no @mention.
+
+Following is deliberately narrow, because subscribing to `message.*` means
+receiving every message in every channel the bot is in. `shouldHandle` drops
+almost all of it before any work happens: other people, other channels, edits,
+joins, top-level messages, and the bot's own posts. What survives is a reply
+from the one allowed user, in a thread the agent is already part of.
+
+A mention inside a followed thread arrives twice, once as `app_mention` and
+once as `message`. The message path ignores anything containing the bot's id,
+so the mention path owns it and the task runs once.
+
+Following expires after a day of silence, refreshed each time the agent
+answers. Saying `stop`, `quiet` or `stand down` in the thread ends it at once
+and the agent waves.
+
 ## Only one bridge at a time
 
 Slack Socket Mode allows several concurrent connections and delivers
@@ -219,6 +239,11 @@ You need a Slack app with Socket Mode on, `app_mention` subscribed, and 11 bot
 scopes: `app_mentions:read`, `chat:write`, `users:read`, `channels:read`,
 `groups:read`, `mpim:read`, `im:read`, and the four `*:history` ones, which
 `conversations.replies` needs so it can read a thread it was tagged into late.
+
+To let the agent follow a thread after it has replied, also subscribe to the
+`message.channels`, `message.groups`, `message.im` and `message.mpim` bot
+events. These need no new scopes: the four `*:history` ones above already cover
+them, so it is a config change rather than a reinstall.
 
 `reactions:write` is optional. With it, the agent marks your own message 👀 when
 it picks the work up and ✅ or ❌ when it finishes, which is visible from the

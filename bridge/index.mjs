@@ -27,6 +27,7 @@ import { healBrowser } from './browser-health.mjs';
 import { pickModel, stripDirective } from './router.mjs';
 import { acquire, release } from './lock.mjs';
 import { react, settle, setStatus, WORKING } from './status.mjs';
+import { createSubscriptionStore, shouldHandle, isStopPhrase } from './subscriptions.mjs';
 
 const { App } = bolt;
 
@@ -178,7 +179,26 @@ async function main() {
   const pruned = await sessions.prune();
   if (pruned) console.log(`[agent] retired ${pruned} stale session(s)`);
 
-  app.event('app_mention', async ({ event, client }) => {
+  const subscriptions = createSubscriptionStore();
+
+  // A mention is a good way to start a conversation and a poor way to continue
+  // one. After the agent replies in a thread it follows that thread, so a plain
+  // reply is enough until the subscription expires or is stopped.
+  app.event('message', async ({ event, client }) => {
+    if (!channelAllowed(ALLOWED_CHANNEL, event.channel)) return;
+    const subscribed = await subscriptions.isSubscribed(event.thread_ts);
+    if (!shouldHandle(event, { botUserId, allowedUser: ALLOWED_USER, subscribed })) return;
+    if (isStopPhrase(event.text)) {
+      await subscriptions.unsubscribe(event.thread_ts);
+      await react(client, { channel: event.channel, ts: event.ts, name: 'wave', logger: console });
+      console.log(`[agent] unfollowed ${event.thread_ts}`);
+      return;
+    }
+    await handleTurn({ event, client, text: event.text });
+  });
+
+  // One path for both entry points: a mention, and a reply in a followed thread.
+  async function handleTurn({ event, client, text }) {
     // The whole access control. Anyone else in the channel is ignored in
     // silence: replying would tell an unauthorised user the bot is listening.
     if (event.user !== ALLOWED_USER) {
@@ -192,7 +212,7 @@ async function main() {
 
     const channel = event.channel;
     const threadTs = event.thread_ts || event.ts;
-    const mentioned = parseMention(event.text, botUserId);
+    const mentioned = parseMention(text ?? event.text, botUserId);
     // Route on what the user typed, then strip the routing marker so the model is
     // never handed "deep:" as part of the task.
     const route = pickModel(mentioned);
@@ -329,6 +349,8 @@ async function main() {
           ...(blocks ? { blocks } : {}),
         });
         ok = !/^(❌|⏱|🌐|⚠️)/.test(body);
+          // Follow the thread so the next turn needs no mention.
+          if (ok) await subscriptions.subscribe(threadTs, { channel });
       } catch (err) {
         console.error('[agent] run failed:', err);
         if (placeholderTs) {
@@ -348,6 +370,10 @@ async function main() {
         if (placeholderTs) await pendingStore.remove(channel, placeholderTs);
       }
     });
+  }
+
+  app.event('app_mention', async ({ event, client }) => {
+    await handleTurn({ event, client, text: event.text });
   });
 
   // Refuse to become a second answering bridge. Slack fans app_mention out to

@@ -28,7 +28,7 @@ import { pickModel, stripDirective } from './router.mjs';
 import { acquire, release } from './lock.mjs';
 import { react, settle, setStatus, WORKING } from './status.mjs';
 import { createSubscriptionStore, shouldHandle, isStopPhrase } from './subscriptions.mjs';
-import { allowedTools, BASE_TOOLS } from './browser.mjs';
+import { allowedTools, browserCdpUrl, BASE_TOOLS } from './browser.mjs';
 
 const { App } = bolt;
 
@@ -162,7 +162,14 @@ async function main() {
   // the browser should not cost you the channel you would use to ask about it.
   ALLOWED_TOOLS = await allowedTools(MCP_CONFIG);
   const browsers = ALLOWED_TOOLS.filter((t) => t.startsWith('mcp__'));
-  console.log(`[browser] ${browsers.length ? browsers.join(', ') : 'none attached'} (from ${MCP_CONFIG})`);
+  // Only a CDP browser can be preflighted, and only a CDP browser wedges the
+  // way the preflight looks for. Null here means the check is skipped rather
+  // than run and failed, which is what it used to do on every single run.
+  const cdpUrl = await browserCdpUrl(MCP_CONFIG);
+  console.log(
+    `[browser] ${browsers.length ? browsers.join(', ') : 'none attached'} (from ${MCP_CONFIG})` +
+    `${cdpUrl ? `, CDP at ${cdpUrl}` : ', not CDP, health preflight off'}`,
+  );
 
   const app = new App({
     token: SLACK_BOT_TOKEN,
@@ -303,11 +310,13 @@ async function main() {
         // Measured 2026-08-27: one stuck Calendar tab and three of WhatsApp
         // Web's WASM VoIP workers took the whole browser layer down for a full
         // run. See browser-health.mjs.
-        try {
-          const health = await healBrowser({});
-          if (health.healed) console.log(`[browser-health] cleared ${health.healed} wedged target(s)`);
-        } catch (err) {
-          console.warn(`[browser-health] preflight failed, continuing: ${err.message}`);
+        if (cdpUrl) {
+          try {
+            const health = await healBrowser({ cdpUrl });
+            if (health.healed) console.log(`[browser-health] cleared ${health.healed} wedged target(s)`);
+          } catch (err) {
+            console.warn(`[browser-health] preflight failed, continuing: ${err.message}`);
+          }
         }
 
         let result = await runAgent({

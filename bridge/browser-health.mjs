@@ -44,8 +44,16 @@ function withTimeout(promise, ms) {
 
 /** Minimal CDP client. Deliberately not Playwright: the point is to work when Playwright cannot. */
 async function connect(cdpUrl) {
-  const res = await withTimeout(fetch(`${cdpUrl}/json/version`).then((r) => r.json()), 5000);
-  if (res.timedOut || !res.webSocketDebuggerUrl) return null;
+  // A refused connection is the clearest "there is no CDP here" there is, and it
+  // was the one case that threw: withTimeout races, so a rejected fetch rejected
+  // the race, past the !reachable branch that exists precisely for this. The
+  // caller then logged "preflight failed" on every start of a machine whose
+  // browser layer is not CDP at all. Catching turns it back into an answer.
+  const res = await withTimeout(
+    fetch(`${cdpUrl}/json/version`).then((r) => r.json()).catch(() => ({ unreachable: true })),
+    5000,
+  );
+  if (res.timedOut || res.unreachable || !res.webSocketDebuggerUrl) return null;
 
   const ws = new WebSocket(res.webSocketDebuggerUrl);
   const pending = new Map();
@@ -124,7 +132,10 @@ export async function healBrowser({ cdpUrl = DEFAULT_CDP_URL, log = console.warn
   const { reachable, wedged, checked } = await checkBrowserHealth({ cdpUrl });
 
   if (!reachable) {
-    log('[browser-health] no CDP endpoint, skipping preflight');
+    // Quiet by default. A machine whose browser layer is not CDP hits this on
+    // every run and there is nothing to report; index.mjs skips the call
+    // entirely in that case, so reaching here means CDP was expected.
+    log?.('[browser-health] no CDP endpoint, skipping preflight');
     return { reachable: false, healed: 0 };
   }
   if (!wedged.length) return { reachable: true, healed: 0, checked };

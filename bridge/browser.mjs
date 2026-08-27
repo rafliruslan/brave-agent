@@ -62,3 +62,42 @@ export async function browserPrefixes(path, { read = readFile, log = console.war
 export async function allowedTools(path, { base = BASE_TOOLS, ...opts } = {}) {
   return [...(await browserPrefixes(path, opts)), ...base];
 }
+
+/**
+ * Flags by which an MCP server declares it drives a browser over CDP.
+ * Playwright spells it one way, chrome-devtools-mcp another.
+ */
+const CDP_FLAGS = ['--cdp-endpoint', '--browserUrl'];
+
+/**
+ * The CDP endpoint this machine's browser layer uses, or null if it has none.
+ *
+ * Only a CDP browser can be preflighted for wedged targets, and only a CDP
+ * browser can go wedged in that way. Aside is driven through its own process
+ * and exposes no port, so probing one there fails on every single run and says
+ * nothing. Reading the answer out of the same config that picks the browser
+ * keeps this from becoming a second thing to remember.
+ *
+ * Returns the URL rather than a boolean so the check probes the port actually
+ * configured, instead of assuming the default.
+ */
+export function cdpEndpoint(config) {
+  const servers = config?.mcpServers;
+  if (!servers || typeof servers !== 'object') return null;
+  for (const server of Object.values(servers)) {
+    const args = Array.isArray(server?.args) ? server.args : [];
+    for (let i = 0; i < args.length; i++) {
+      if (CDP_FLAGS.includes(args[i]) && typeof args[i + 1] === 'string') return args[i + 1];
+    }
+  }
+  return null;
+}
+
+/** Read the config and report its CDP endpoint. Unreadable config means none. */
+export async function browserCdpUrl(path, { read = readFile } = {}) {
+  try {
+    return cdpEndpoint(JSON.parse(await read(path, 'utf8')));
+  } catch {
+    return null;
+  }
+}

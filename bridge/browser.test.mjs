@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { toolPrefixes, allowedTools, browserPrefixes, BASE_TOOLS } from './browser.mjs';
+import { toolPrefixes, allowedTools, browserPrefixes, cdpEndpoint, browserCdpUrl, BASE_TOOLS } from './browser.mjs';
 
 const BRAVE = { mcpServers: { brave: {}, devtools: {}, 'brave-repl': {} } };
 const ASIDE = { mcpServers: { aside: {} } };
@@ -94,4 +94,42 @@ test('the shipped macOS config attaches Aside', async () => {
   const tools = await allowedTools(new URL('./config.example/mcp.aside.json', import.meta.url).pathname);
   assert.ok(tools.includes('mcp__aside'));
   assert.ok(!tools.includes('mcp__brave'), 'the macOS layer must not also attach Brave');
+});
+
+// --- which browser layer, and therefore whether a CDP preflight makes sense ---
+
+test('cdpEndpoint finds the Playwright endpoint', () => {
+  assert.equal(cdpEndpoint({ mcpServers: { brave: { args: ['-y', 'x', '--cdp-endpoint', 'http://127.0.0.1:9222'] } } }), 'http://127.0.0.1:9222');
+});
+
+test('cdpEndpoint finds the chrome-devtools spelling too', () => {
+  assert.equal(cdpEndpoint({ mcpServers: { devtools: { args: ['--browserUrl', 'http://127.0.0.1:9333'] } } }), 'http://127.0.0.1:9333');
+});
+
+// The whole reason this exists: Aside exposes no port, so probing one fails on
+// every run and reports nothing.
+test('cdpEndpoint returns null for a non-CDP browser layer', () => {
+  assert.equal(cdpEndpoint({ mcpServers: { aside: { args: ['mcp'] } } }), null);
+});
+
+test('cdpEndpoint handles junk without throwing', () => {
+  assert.equal(cdpEndpoint(null), null);
+  assert.equal(cdpEndpoint({}), null);
+  assert.equal(cdpEndpoint({ mcpServers: { a: {} } }), null);
+  assert.equal(cdpEndpoint({ mcpServers: { a: { args: 'nope' } } }), null);
+});
+
+// A flag with nothing after it is a broken config, not an endpoint.
+test('cdpEndpoint ignores a trailing flag with no value', () => {
+  assert.equal(cdpEndpoint({ mcpServers: { a: { args: ['--cdp-endpoint'] } } }), null);
+});
+
+test('the shipped configs disagree about CDP, which is the point', async () => {
+  const here = (f) => new URL(`./config.example/${f}`, import.meta.url).pathname;
+  assert.equal(await browserCdpUrl(here('mcp.json')), 'http://127.0.0.1:9222');
+  assert.equal(await browserCdpUrl(here('mcp.aside.json')), null);
+});
+
+test('browserCdpUrl treats an unreadable config as no CDP', async () => {
+  assert.equal(await browserCdpUrl('/nope/mcp.json'), null);
 });

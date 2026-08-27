@@ -226,6 +226,18 @@ agent will pick the API connector it can see, be refused, and report a permissio
 problem — while the site sits logged in one tab away. Use `--strict-mcp-config`
 so it only sees what it can actually use.
 
+**A config-driven default that works is the hardest kind to notice.** Moving the
+persona from hardcoded to a config file turned a value into a missing file, and
+the fallback was competent enough that the agent ran without its character for
+sixteen hours before anyone spotted it. If a fallback is good, log when you take
+it.
+
+**Screenshots stay in the conversation.** Each one is re-sent on every later
+turn, so five of them cost far more than five screenshots. One run took five full
+page PNGs, two at 1.1MB, and passed a ten minute timeout with nothing reported.
+The shipped `mcp.json` caps devtools screenshots at jpeg quality 60 and 1400px
+for that reason.
+
 **Verify, do not report.** Many web apps render an unsaved item exactly like a
 saved one. Google Calendar labels an unsaved event `Event is being created.`
 "The click returned success" is not evidence the app accepted it.

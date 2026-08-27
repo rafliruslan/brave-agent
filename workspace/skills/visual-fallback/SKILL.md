@@ -12,6 +12,27 @@ better than CSS selectors on modern SPA markup.
 
 Most work should never render an image at all.
 
+## Screenshots are the most expensive thing you do
+
+Every screenshot enters the conversation as an image and **stays there for every
+later turn**. Five of them do not cost five screenshots, they cost five images
+re-sent on every subsequent tool call.
+
+Measured 2026-08-27 on a run asking for one BixGrow screenshot: five full page
+PNGs, two of them 1.1MB each, 3MB of a 4.5MB transcript. The run passed the ten
+minute timeout and was killed with nothing reported.
+
+So:
+
+- **Prefer `mcp__devtools__take_screenshot`.** That server is configured to
+  return JPEG at quality 60 capped to 1400px wide, several times smaller than
+  brave's full page PNG default.
+- **Never `fullPage: true` unless the question is about the whole page.** The
+  viewport is almost always the answer.
+- **Two screenshots is a lot. Five means something has gone wrong.** If you are
+  taking another because the last one did not tell you what you needed, the
+  problem is usually that a snapshot would have answered it.
+
 ## Take a screenshot when
 
 - **The question is visual.** Spacing, alignment, colour, whether a design reads

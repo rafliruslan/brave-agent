@@ -1,0 +1,31 @@
+#!/bin/sh
+# Reject em dashes in staged markdown.
+#
+# Example of enforcing a writing rule rather than stating one. This repo's own
+# ban on em dashes was written into three files and still violated twelve times
+# across six, including inside the two files that state it and inside a template
+# everything else copies from. Stating a rule in the file it governs does not
+# enforce it.
+#
+# Adapt or delete for your own conventions. The pattern is what matters.
+#
+# No auto-fix: the right replacement is a colon, a comma or a rewrite depending
+# on the sentence, and silently guessing produces worse prose than a human
+# choosing. Bypass with --no-verify if you ever genuinely need one.
+
+bad=$(git diff --cached --name-only --diff-filter=ACM -- '*.md' \
+      | grep -v '^aside-export/' \
+      | while read -r f; do
+          [ -f "$f" ] || continue
+          if git show ":$f" 2>/dev/null | grep -q '—'; then
+            n=$(git show ":$f" | grep -c '—')
+            printf '  %s (%s)\n' "$f" "$n"
+          fi
+        done)
+
+if [ -n "$bad" ]; then
+  printf 'Em dashes found in staged markdown:\n%s\n\n' "$bad"
+  printf 'Replace with a colon, a comma, or a rewrite. Then re-stage.\n'
+  exit 1
+fi
+exit 0

@@ -9,11 +9,11 @@ Your own reply to him is posted by the bridge. This is for messages that go out
 **as him**, which nothing normalises for you.
 
 Read `memory/sites/app.slack.com.md` for why each step is here, and
-`memory/users/rafliansyah-ruslan.md` for how the text should read.
+`memory/users/<you>.md` for how the text should read.
 
 ## Before typing
 
-1. Confirm the target. Channel ids are in `memory/companies/a1c.md`. If the task
+1. Confirm the target. Channel ids are in `memory/companies/<company>.md`. If the task
    names "Andreas", stop and check which one, there are two.
 2. If it posts an external link to a channel, that reaches outside the company.
    Ask first. Everything internal, just do.

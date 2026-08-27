@@ -1,6 +1,6 @@
 ---
 name: skill-creator
-description: Turn something you just worked out into a reusable skill or a memory file. Use after finishing a task that took real discovery — a site's quirks, a multi-step procedure, a working recipe — so the next run does not rediscover it. Also use when the user says to remember how to do something.
+description: Turn something you just worked out into a reusable skill or a memory file. Use after finishing a task that took real discovery , a site's quirks, a multi-step procedure, a working recipe , so the next run does not rediscover it. Also use when the user says to remember how to do something.
 ---
 
 # Writing things down

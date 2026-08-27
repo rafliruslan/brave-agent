@@ -44,7 +44,7 @@ Written 2026-08-25, the day the agent moved off the Mac.
   `Profile 3` is **Personal**. Brave is pinned to `Default` by
   `--profile-directory` in `~/.config/brave-flags.conf`, and CDP tabs land
   there. Verified 2026-08-25: `brave://version` reported Profile Path
-  `/home/rafli/.local/share/brave-profile/Default`.
+  `/home/<you>/.local/share/brave-profile/Default`.
 - **Never work in Personal.** If you find yourself on a page signed in as his
   personal account rather than the the company one, stop and say so rather than acting.
   `brave://version` confirms which profile you are in.

@@ -193,7 +193,13 @@ async function main() {
   // run and cleared after, so a process that dies in between leaves a thread
   // that looks like it is still being worked on, forever. Clearing them is the
   // point of this loop; the message is so it is not silent.
-  for (const orphan of await pendingStore.takeAll()) {
+  const orphans = await pendingStore.takeAll();
+  if (orphans.length) {
+    // Silent recovery is indistinguishable from no recovery, and the two mean
+    // very different things after a restart: one says a run was destroyed.
+    console.warn(`[agent] ${orphans.length} run(s) were cut off by a restart; clearing and reporting`);
+  }
+  for (const orphan of orphans) {
     try {
       await settle(app.client, { channel: orphan.channel, ts: orphan.ts, ok: false, logger: console });
       await setStatus(app.client, { channel: orphan.channel, threadTs: orphan.threadTs, status: '', logger: console });

@@ -34,6 +34,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const CDP = process.env.BRAVE_CDP_ENDPOINT || 'http://127.0.0.1:9222';
+const CONNECT_TIMEOUT_MS = Number(process.env.BRAVE_CDP_TIMEOUT_MS) || 120_000;
 
 /**
  * Where the hand-written site notes live. Same resolution as the memory
@@ -80,7 +81,12 @@ const lastSerial = new Map();
 
 async function connect() {
   if (browser && browser.isConnected()) return browser;
-  browser = await chromium.connectOverCDP(CDP);
+  // Playwright's default connect timeout is 30s, and it attaches to every
+  // target on the way in. That is ample for a headless test browser and not
+  // ample for a real one: a signed-in profile with a couple of dozen tabs and
+  // extension background pages timed out every time, reporting only
+  // "Timeout 30000ms exceeded" with no hint that the browser was fine.
+  browser = await chromium.connectOverCDP(CDP, { timeout: CONNECT_TIMEOUT_MS });
   return browser;
 }
 

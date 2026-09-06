@@ -171,7 +171,7 @@ browser, which is very good and is why it is the macOS layer.
 | Billing on Claude | **subscription** (`claude -p`) | subscription | Max + purchased extra credits, or per-token API |
 | Channels | Slack | Slack, Telegram, Discord | **Slack, Telegram, Discord, WhatsApp, Signal, CLI** |
 | Memory | markdown files, grep | local-first, structured | **FTS5 + LLM summarisation** |
-| Skills | markdown, self-extending | **markdown, keyword auto-inject** | markdown, self-improving |
+| Skills | markdown, self-extending, site notes injected on arrival | markdown, keyword auto-inject | markdown, self-improving |
 | Execution backends | local | local | **6, incl. Docker, SSH, Modal** |
 | Users | one, for one day | many | many |
 

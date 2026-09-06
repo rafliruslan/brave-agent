@@ -29,8 +29,50 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { chromium } from 'playwright-core';
 import { collect } from './snapshot.mjs';
 import { resolveTarget, isWrite, renderResponse } from './fetch.mjs';
+import { pickNote, renderNote } from './siteskill.mjs';
+import { readdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
 const CDP = process.env.BRAVE_CDP_ENDPOINT || 'http://127.0.0.1:9222';
+
+/**
+ * Where the hand-written site notes live. Same resolution as the memory
+ * server: the agent's cwd is its workspace, so the default needs no config.
+ */
+const SITES = join(
+  process.env.AGENT_MEMORY_DIR ||
+    (process.env.AGENT_WORKSPACE ? join(process.env.AGENT_WORKSPACE, 'memory') : join(process.cwd(), 'memory')),
+  'sites',
+);
+
+/**
+ * Hosts whose note has already been sent this session.
+ *
+ * Injected once, not on every navigation. The note does not change while the
+ * agent works, and re-sending 4KB each time it moves between Slack channels
+ * would cost more than the mistake it prevents - the same reasoning that makes
+ * `snapshot` return a diff.
+ */
+const noteSent = new Set();
+
+/** The site note for a url, or null. Never throws: no notes is a normal state. */
+async function siteNoteFor(url) {
+  let host;
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    return null;
+  }
+  if (!host || noteSent.has(host)) return null;
+  try {
+    const file = pickNote(host, await readdir(SITES));
+    if (!file) return null;
+    noteSent.add(host);
+    return renderNote({ path: `sites/${file}`, text: await readFile(join(SITES, file), 'utf8') });
+  } catch {
+    return null;
+  }
+}
 
 let browser = null;
 /** Last serialised snapshot per page URL, so `diff` has something to compare. */
@@ -337,6 +379,13 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         '',
         renderSnapshot(snap, 'diff'),
       ];
+      // Arriving somewhere is when a site note is worth having, not later when
+      // the agent has already typed into the composer the note warns about.
+      const note = results.some((r) => r.op === 'navigate' && !r.error)
+        ? await siteNoteFor(page.url())
+        : null;
+      if (note) lines.push('', note);
+
       const content = [{ type: 'text', text: lines.join('\n') }];
       for (const s of shots) content.push({ type: 'image', data: s, mimeType: 'image/jpeg' });
       return { content, isError: Boolean(failed) };

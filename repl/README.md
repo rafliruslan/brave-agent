@@ -86,6 +86,35 @@ same authority a click has, reached faster - which is the point and the risk in
 one sentence. `set-cookie` is never echoed back: response headers are an
 allowlist, because a denylist has to be right about every header a site invents.
 
+## Site notes arrive with the page
+
+`workspace/CLAUDE.md` says of the Slack note: "Read before typing into Slack."
+That only works if the agent remembers both that it is standing on Slack and
+that a note exists, and the failure is silent when it does not - it types into
+the composer the note warns about and finds out afterwards. Aside calls the
+equivalent keyword auto-injection.
+
+So a successful `navigate` appends the note for that host, if there is one:
+
+```
+memory/sites/app.slack.com.md   ->  injected on arriving at app.slack.com
+memory/sites/google.com.md      ->  covers mail. and docs. too
+```
+
+A filename lookup, not a search: `memory/sites/` is already named by hostname,
+so the note is decidable without ranking anything and this stays independent of
+the memory server. Matching is on whole labels, most specific first, so
+`evil.test` cannot borrow another site's note by embedding its name, and a
+single-label `com.md` can never apply to most of the web.
+
+**Once per host per session.** The note does not change while the agent works,
+and re-sending 4KB every time it moves between Slack channels would cost more
+than the mistake it prevents. Same reasoning as the snapshot diff. A note past
+6KB collapses to its headings and where to read the rest.
+
+It is labelled `SITE NOTE`, because it arrives appended to a page snapshot and
+must not read as something the page said.
+
 ## Refs are ours alone
 
 Three servers now attach to the same browser and none of their ids interchange:

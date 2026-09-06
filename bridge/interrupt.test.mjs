@@ -78,3 +78,32 @@ test('a multi-line instruction is still steered, in full', () => {
     prompt: 'check the inbox\nthen report back',
   });
 });
+
+test('a stop survives the attribution appended INLINE', () => {
+  // The actual observed form, logged off a live event. It is appended with a
+  // space, not a newline, so a first-line rule cannot see it - which is why
+  // the first fix for this did not work and the second test was needed.
+  assert.deepEqual(parseInterrupt('!stop *Sent using* <@U0A8UAU3P3Q>'), {
+    stop: true,
+    prompt: null,
+  });
+});
+
+test('a bare ! survives the inline attribution', () => {
+  assert.deepEqual(parseInterrupt('! *Sent using* <@U0A8UAU3P3Q>'), { stop: true, prompt: null });
+});
+
+test('a steered instruction loses the attribution but keeps the instruction', () => {
+  assert.deepEqual(parseInterrupt('!check the inbox *Sent using* <@U0A8UAU3P3Q>'), {
+    stop: false,
+    prompt: 'check the inbox',
+  });
+});
+
+test('an instruction that merely mentions sending is untouched', () => {
+  // The strip is anchored to the end, so ordinary prose survives.
+  assert.deepEqual(parseInterrupt('!tell me what you are sending'), {
+    stop: false,
+    prompt: 'tell me what you are sending',
+  });
+});

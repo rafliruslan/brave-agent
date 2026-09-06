@@ -167,3 +167,42 @@ test('bootTime is derived from uptime, so it works on Linux and macOS alike', ()
   const now = Date.parse('2026-09-06T03:00:00Z');
   assert.equal(bootTime(now, () => 3600), Date.parse('2026-09-06T02:00:00Z'));
 });
+
+// --- host ------------------------------------------------------------------
+//
+// The lock records a host and nothing read it. On a shared home directory
+// (NFS) a lock written by another machine had its pid checked against the
+// local process table, which answers a question about the wrong computer.
+
+test('a lock from another host is held, even when the local pid is dead', () => {
+  const boot = Date.parse('2026-09-06T02:10:00Z');
+  const held = { pid: 1018, host: 'other-box', since: '2026-09-06T03:00:00.000Z' };
+  assert.equal(stillHeld(held, { pid: 99, alive: () => false, boot, host: 'mine' }), true);
+});
+
+test('a lock from another host is held, even when it predates OUR boot', () => {
+  // Our uptime says nothing about theirs. Neither test applies across machines,
+  // so there is nothing to prove it dead with, and refusing to start is the
+  // safe half of the asymmetry.
+  const boot = Date.parse('2026-09-06T02:10:00Z');
+  const held = { pid: 1018, host: 'other-box', since: '2026-09-03T04:35:34.422Z' };
+  assert.equal(stillHeld(held, { pid: 99, alive: () => false, boot, host: 'mine' }), true);
+});
+
+test('a lock from this host is judged as before', () => {
+  const boot = Date.parse('2026-09-06T02:10:00Z');
+  const held = { pid: 1018, host: 'mine', since: '2026-09-03T04:35:34.422Z' };
+  assert.equal(stillHeld(held, { pid: 99, alive: () => true, boot, host: 'mine' }), false);
+});
+
+test('a lock with no host recorded is judged on pid and boot alone', () => {
+  const boot = Date.parse('2026-09-06T02:10:00Z');
+  const held = { pid: 1018, since: '2026-09-06T03:00:00.000Z' };
+  assert.equal(stillHeld(held, { pid: 99, alive: () => true, boot, host: 'mine' }), true);
+});
+
+test('our own pid on our own host is still not held against us', () => {
+  const boot = Date.parse('2026-09-06T02:10:00Z');
+  const held = { pid: 42, host: 'mine', since: '2026-09-06T03:00:00.000Z' };
+  assert.equal(stillHeld(held, { pid: 42, alive: () => true, boot, host: 'mine' }), false);
+});

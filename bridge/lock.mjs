@@ -71,8 +71,19 @@ const BOOT_GRACE_MS = 60_000;
  *
  * Pure, so the awkward cases can be tested without rebooting anything.
  */
-export function stillHeld(held, { pid = process.pid, alive = isAlive, boot = bootTime() } = {}) {
+export function stillHeld(
+  held,
+  { pid = process.pid, alive = isAlive, boot = bootTime(), host = hostname() } = {},
+) {
   if (!held || held.pid === pid) return false;
+
+  // A lock from another machine, which happens when ~ is shared. Neither test
+  // below means anything across a network: the local process table is about
+  // the wrong computer, and our uptime says nothing about theirs. Nothing here
+  // can prove it dead, so it stays held, and a human clears the file. That is
+  // the safe half of the asymmetry - see BOOT_GRACE_MS. An older lock with no
+  // host recorded is judged on pid and boot alone, as before.
+  if (held.host && host && held.host !== host) return true;
 
   // A lock older than this boot is a corpse regardless of who holds its pid now.
   // An unparseable or absent timestamp means an older lock file, and refusing

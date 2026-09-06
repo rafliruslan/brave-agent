@@ -12,7 +12,7 @@
 
 import { readFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, hostname } from 'node:os';
 import bolt from '@slack/bolt';
 
 import { PERSONA } from './persona.mjs';
@@ -418,10 +418,18 @@ async function main() {
   // the agent look like it contradicts itself.
   const lock = await acquire();
   if (!lock.ok) {
+    // "Stop that one first" is bad advice when the holder is on a different
+    // machine: there is nothing local to stop, and nothing here can prove it
+    // dead either, so the file is the only way out.
+    const elsewhere = lock.holder.host && lock.holder.host !== hostname();
     console.error(
       `[agent] another bridge holds the lock: pid ${lock.holder.pid} on ` +
       `${lock.holder.host} since ${lock.holder.since}. Refusing to start, because ` +
-      `two bridges answer every mention twice. Stop that one first.`,
+      `two bridges answer every mention twice. ` +
+      (elsewhere
+        ? `That is a different machine, so this one cannot tell whether it is still alive. ` +
+          `Stop it there, or delete the lock file if you know it is gone.`
+        : `Stop that one first.`),
     );
     process.exit(1);
   }

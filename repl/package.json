@@ -8,5 +8,8 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "playwright-core": "^1.49.0"
+  },
+  "scripts": {
+    "test": "node --test"
   }
 }

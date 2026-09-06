@@ -48,6 +48,44 @@ cosmetic" because an ungated escape hatch let the agent route around
 restrictions. Arbitrary page scripting is also what left a half-created calendar
 event behind here, which then had to be hunted down and deleted.
 
+## `fetch`: the site's own API, with the session already in it
+
+Aside's site skills say "don't have to open a browser tab" for Gmail, Docs,
+Sheets and Notion. That is the real gap against a DOM-driving agent, and it is
+not that Aside clicks better - it often is not clicking at all. It uses the
+signed-in session as an HTTP client.
+
+`fetch` does the same thing on Brave. The request is issued *by the page*, so it
+carries that session's cookies and needs no token:
+
+```
+navigate  https://httpbin.org/cookies/set?sessiondemo=abc123
+fetch     /cookies
+          -> { "cookies": { "sessiondemo": "abc123" } }
+```
+
+Reading a mailbox or a calendar this way is one call rather than the dozen a DOM
+walk takes, and it leaves the screen alone.
+
+**Same-origin only.** The check is here, not left to CORS. Without it this stops
+being "read the Gmail you are signed in to" and becomes "make authenticated
+requests to anywhere, from inside the user's browser", and a policy that depends
+on the target site's own headers is not a policy. To reach another site, open a
+tab on it and fetch from there.
+
+**It is a separate tool, not an `act` op, on purpose.** Denial is per tool. An op
+inside `act` could only be removed by removing all of `act`, and the whole reason
+`op` is a closed enum is that a dangerous capability should be removable:
+
+```
+--deniedTools mcp__brave-repl__fetch
+```
+
+Writes act as the user immediately, with no draft step and no undo. That is the
+same authority a click has, reached faster - which is the point and the risk in
+one sentence. `set-cookie` is never echoed back: response headers are an
+allowlist, because a denylist has to be right about every header a site invents.
+
 ## Refs are ours alone
 
 Three servers now attach to the same browser and none of their ids interchange:

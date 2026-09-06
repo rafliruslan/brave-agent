@@ -28,6 +28,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { chromium } from 'playwright-core';
 import { collect } from './snapshot.mjs';
+import { resolveTarget, isWrite, renderResponse } from './fetch.mjs';
 
 const CDP = process.env.BRAVE_CDP_ENDPOINT || 'http://127.0.0.1:9222';
 
@@ -216,6 +217,23 @@ const TOOLS = [
     description: 'List open tabs with index, title and URL.',
     inputSchema: { type: 'object', properties: {} },
   },
+  {
+    name: 'fetch',
+    description:
+      'Call a site\'s own API from inside a tab already signed in to it, and get the response back. The request runs in the page, so it carries that session\'s cookies and needs no token. Use it whenever the site has an endpoint for what you want: reading a mailbox, a doc or a calendar this way is one call instead of the dozen a DOM walk takes, and it does not disturb what is on screen. SAME-ORIGIN ONLY - open a tab on the site first, then fetch its paths. Writes (POST, PUT, PATCH, DELETE) act as the user, immediately and for real; there is no draft step and no undo, so be as sure as you would be before clicking Send.',
+    inputSchema: {
+      type: 'object',
+      required: ['url'],
+      properties: {
+        url: { type: 'string', description: 'Path or absolute url. Must be the same origin as the page.' },
+        page: { type: ['string', 'number'], description: 'Which tab supplies the session. Defaults to the page you last snapshotted.' },
+        method: { type: 'string', default: 'GET', description: 'GET, POST, PUT, PATCH, DELETE, HEAD' },
+        headers: { type: 'object', description: 'Extra request headers. Content-Type is set for you when body is an object.' },
+        body: { type: ['string', 'object'], description: 'String sent as-is; object is JSON-encoded.' },
+        maxChars: { type: 'number', default: 12000, description: 'Truncate the response body at this many characters.' },
+      },
+    },
+  },
 ];
 
 const server = new Server({ name: 'brave-repl', version: '0.1.0' }, { capabilities: { tools: {} } });
@@ -239,6 +257,50 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       const page = await resolvePage(b, args.page);
       const r = await snapshotPage(page, args.mode || 'full');
       return { content: [{ type: 'text', text: renderSnapshot(r, args.mode || 'full') }] };
+    }
+
+    if (name === 'fetch') {
+      const page = await resolvePage(b, args.page);
+      const { url } = resolveTarget(page.url(), args.url);
+      const method = String(args.method || 'GET').toUpperCase();
+
+      // The request is issued by the page, not by node, which is the entire
+      // point: node has no session, and the page has the one the user signed
+      // in with. credentials:'same-origin' is the default for same-origin, but
+      // saying it makes the intent unmissable to anyone reading this later.
+      const res = await page.evaluate(
+        async ({ url, method, headers, body }) => {
+          try {
+            const init = { method, credentials: 'same-origin', headers: { ...(headers || {}) } };
+            if (body !== undefined && body !== null && method !== 'GET' && method !== 'HEAD') {
+              if (typeof body === 'string') {
+                init.body = body;
+              } else {
+                init.body = JSON.stringify(body);
+                if (!Object.keys(init.headers).some((h) => h.toLowerCase() === 'content-type')) {
+                  init.headers['Content-Type'] = 'application/json';
+                }
+              }
+            }
+            const r = await fetch(url, init);
+            const headersOut = {};
+            r.headers.forEach((v, k) => { headersOut[k] = v; });
+            return { status: r.status, statusText: r.statusText, url: r.url, headers: headersOut, body: await r.text() };
+          } catch (err) {
+            return { error: String(err && err.message ? err.message : err) };
+          }
+        },
+        { url, method, headers: args.headers, body: args.body },
+      );
+
+      const text = renderResponse(res, { maxChars: args.maxChars ?? 12000 });
+      // A write that came back 4xx/5xx is the case most worth not glossing:
+      // the agent should see it failed rather than read a body and move on.
+      const bad = Boolean(res?.error) || (typeof res?.status === 'number' && res.status >= 400);
+      return {
+        content: [{ type: 'text', text: isWrite(method) ? `${method} ${url}\n${text}` : text }],
+        isError: bad,
+      };
     }
 
     if (name === 'act') {

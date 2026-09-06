@@ -34,7 +34,7 @@ Slack (Socket Mode)
 | **`plugin/`** | A Claude Code plugin: two MCP servers on one running Brave, plus the browser skills and `/brave-setup`. Useful on its own if you just want Claude Code to drive your browser from a terminal. |
 | **`bridge/`** | The harness. A Slack Socket Mode daemon that maps threads to sessions, serialises work per thread, survives restarts, and recovers its own orphaned messages. |
 | **`workspace/`** | The agent's memory and skills, as a starting template. Semantic memory it reads on demand, procedural skills it can extend itself. |
-| **`repl/`** | A third MCP server of our own: accessibility snapshots that return a **diff** rather than the whole tree. See `repl/README.md`. |
+| **`repl/`** | A third MCP server of our own: accessibility snapshots that return a **diff**, and `fetch`, which calls a site's own API from inside a tab already signed in to it. See `repl/README.md`. |
 | **`memory/`** | A fourth: ranked search over `workspace/memory/` that returns matching **sections** rather than files. Listed in both browser configs, so the agent has it on either machine. |
 
 ## It learns while you use it
@@ -182,7 +182,10 @@ Odysseys), and this has been used by one person for one day. It shields
 credentials from the model at the vault layer, where this only instructs the
 agent not to print them. Its single `repl` tool is more expressive than granular
 MCP calls: one 120-second call can snapshot, decide, act and verify where this
-takes a dozen round-trips. That last point stopped being a comparison and became
+takes a dozen round-trips. The `fetch` tool closes part of that: where a site
+has an API, this now reaches it in one call with the session attached, the same
+way Aside's site skills avoid opening a tab. Where it does not, the round-trip
+gap stands. That last point stopped being a comparison and became
 a dependency: on macOS this drives Aside, so it gets the expressive `repl` and
 also loses the ability to deny it. See
 [where the macOS setup is less safe](#where-the-macos-setup-is-less-safe-plainly).

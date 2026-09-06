@@ -17,6 +17,15 @@ export function createRunRegistry({ log = console } = {}) {
   /** @type {Map<string, {child: object, startedBy: object|null}>} */
   const live = new Map();
 
+  /**
+   * Keys whose run was killed deliberately.
+   *
+   * A SIGKILLed child exits non-zero, so the run reports failure and the
+   * bridge posts "❌ Failed." immediately before "Stopped." Nothing went
+   * wrong. This lets the caller tell the two apart and stay quiet.
+   */
+  const stoppedOnPurpose = new Set();
+
   /** Forget a child, but only if it is still the one on record. */
   function untrack(key, child) {
     if (live.get(key)?.child === child) live.delete(key);
@@ -74,6 +83,10 @@ export function createRunRegistry({ log = console } = {}) {
      *   now.
      */
     stop(key) {
+      // Marked before the kill, and marked even when there is nothing to kill:
+      // the child may have exited between the check and here, and the user
+      // asked to stop either way.
+      stoppedOnPurpose.add(key);
       const child = live.get(key)?.child;
       if (!child) return false;
       try {
@@ -84,6 +97,14 @@ export function createRunRegistry({ log = console } = {}) {
         live.delete(key);
         return false;
       }
+    },
+
+    /**
+     * Was the run for `key` killed on purpose? Reading clears the mark, so the
+     * NEXT run on that thread is judged on its own result.
+     */
+    takeStopped(key) {
+      return stoppedOnPurpose.delete(key);
     },
 
     size() {

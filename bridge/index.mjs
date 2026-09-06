@@ -446,6 +446,15 @@ async function main() {
           console.log(`[agent] ${result.denials.length} permission denial(s) in ${threadTs}`);
         }
 
+        // A run killed by !stop exits non-zero and reports failure, so this
+        // posted "❌ Failed." immediately before "Stopped." Nothing went
+        // wrong, and the thread read as though it had. The mark is taken, not
+        // peeked, so the next run on this thread is judged on its own result.
+        if (runs.takeStopped(threadTs)) {
+          console.log(`[agent] ${threadTs} was stopped on purpose; not posting the run result`);
+          return;
+        }
+
         const body = formatResult(toLegacyResult(result));
         const blocks = buildBlocks(body);
 

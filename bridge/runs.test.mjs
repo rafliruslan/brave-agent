@@ -118,3 +118,38 @@ test('tracking without metadata still works', () => {
   assert.equal(runs.startedBy('t1'), null);
   assert.equal(runs.isRunning('t1'), true);
 });
+
+// --- a kill is not a failure ------------------------------------------------
+//
+// A SIGKILLed child exits non-zero, so the run reports failure and the bridge
+// posts "❌ Failed." just before "Stopped." Nothing went wrong; the thread just
+// reads as though it did.
+
+test('a stopped run is remembered as stopped on purpose', () => {
+  const runs = createRunRegistry();
+  runs.track('t1', fakeChild());
+  runs.stop('t1');
+  assert.equal(runs.takeStopped('t1'), true);
+});
+
+test('the mark is taken once, so a later run is not silenced too', () => {
+  const runs = createRunRegistry();
+  runs.track('t1', fakeChild());
+  runs.stop('t1');
+  assert.equal(runs.takeStopped('t1'), true);
+  assert.equal(runs.takeStopped('t1'), false);
+});
+
+test('a run nobody stopped is not marked', () => {
+  const runs = createRunRegistry();
+  runs.track('t1', fakeChild());
+  assert.equal(runs.takeStopped('t1'), false);
+});
+
+test('a stop that killed nothing still marks, so the reply stays quiet', () => {
+  // The child may have exited between the check and the kill. The user asked
+  // to stop either way, and a stray "❌ Failed." helps nobody.
+  const runs = createRunRegistry();
+  runs.stop('t1');
+  assert.equal(runs.takeStopped('t1'), true);
+});

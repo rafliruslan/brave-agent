@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Write(skills/**)",
+      "Edit(skills/**)"
+    ],
+    "deny": [
+      "Write(.claude/settings.json)",
+      "Edit(.claude/settings.json)",
+      "Write(.claude/settings.local.json)",
+      "Edit(.claude/settings.local.json)"
+    ]
+  }
+}

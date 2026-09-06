@@ -31,7 +31,20 @@ export function parseInterrupt(text) {
 
   // Only the first `!` is the marker. `!!` is someone leaning on the key, not
   // an instruction named "!".
-  const rest = body.replace(/^!+/, '').trim();
-  if (rest === '' || /^stop$/i.test(rest)) return { stop: true, prompt: null };
+  // Not trimmed yet: trimming here would pull a trailing line up onto the
+  // first one, and "!\n*Sent using* ..." would stop looking like a bare "!".
+  const afterMarker = body.replace(/^!+/, '');
+  const rest = afterMarker.trim();
+
+  // A stop is decided on the FIRST LINE alone. Slack appends an attribution
+  // line to messages sent through some apps, so "!stop" arrives as
+  // "!stop\n*Sent using* <@U0A8...>"; matching the whole body sent that to
+  // steer, which killed the run and immediately started another one with
+  // "stop" as its task. Seen live.
+  const firstLine = afterMarker.split('\n')[0].trim();
+  if (firstLine === '' || /^stop$/i.test(firstLine)) return { stop: true, prompt: null };
+
+  // Anything else keeps every line: a steered instruction is often more than
+  // one, and trimming it to the first would silently drop half the request.
   return { stop: false, prompt: rest };
 }

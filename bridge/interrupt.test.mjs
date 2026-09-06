@@ -52,3 +52,29 @@ test('"stop" without the marker is an ordinary message', () => {
   // makes the difference, so a real instruction is never eaten.
   assert.equal(parseInterrupt('stop the deploy'), null);
 });
+
+// --- trailing noise ---------------------------------------------------------
+//
+// Slack appends an attribution line to messages sent through some apps, so
+// "!stop" arrives as "!stop\n*Sent using* <@U0A8...>". That fell through to
+// steer, killed the run, and immediately started another one with "stop" as
+// the task. Observed live.
+
+test('a stop survives a trailing attribution line', () => {
+  assert.deepEqual(parseInterrupt('!stop\n*Sent using* <@U0A8UAU3P3Q>'), {
+    stop: true,
+    prompt: null,
+  });
+});
+
+test('a bare ! survives a trailing attribution line', () => {
+  assert.deepEqual(parseInterrupt('!\n*Sent using* <@U0A8UAU3P3Q>'), { stop: true, prompt: null });
+});
+
+test('a multi-line instruction is still steered, in full', () => {
+  // The fix must not turn every multi-line interrupt into a stop.
+  assert.deepEqual(parseInterrupt('!check the inbox\nthen report back'), {
+    stop: false,
+    prompt: 'check the inbox\nthen report back',
+  });
+});

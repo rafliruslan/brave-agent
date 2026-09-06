@@ -31,11 +31,11 @@ Slack (Socket Mode)
 
 | | |
 |---|---|
-| **`plugin/`** | A Claude Code plugin: two MCP servers on one running Brave, plus the browser skills and `/brave-setup`. Useful on its own if you just want Claude Code to drive your browser from a terminal. |
+| **`plugin/`** | A Claude Code plugin: four MCP servers on one running Brave, plus the browser skills and `/brave-setup`. Useful on its own if you just want Claude Code to drive your browser from a terminal. The two servers written here live under it, because a plugin can only reach files inside its own root. |
 | **`bridge/`** | The harness. A Slack Socket Mode daemon that maps threads to sessions, serialises work per thread, survives restarts, and recovers its own orphaned messages. |
 | **`workspace/`** | The agent's memory and skills, as a starting template. Semantic memory it reads on demand, procedural skills it can extend itself. |
-| **`repl/`** | A third MCP server of our own: accessibility snapshots that return a **diff**, and `fetch`, which calls a site's own API from inside a tab already signed in to it. See `repl/README.md`. |
-| **`memory/`** | A fourth: ranked search over `workspace/memory/` that returns matching **sections** rather than files. Listed in both browser configs, so the agent has it on either machine. |
+| **`plugin/repl/`** | A third MCP server of our own: accessibility snapshots that return a **diff**, and `fetch`, which calls a site's own API from inside a tab already signed in to it. See `plugin/repl/README.md`. |
+| **`plugin/memory/`** | A fourth: ranked search over `workspace/memory/` that returns matching **sections** rather than files. |
 
 ## It learns while you use it
 

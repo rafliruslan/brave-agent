@@ -21,13 +21,13 @@
     "brave-repl": {
       "command": "node",
       "args": [
-        "/home/USERNAME/.local/share/brave-agent/repl/server.mjs"
+        "/home/USERNAME/.local/share/brave-agent/plugin/repl/server.mjs"
       ]
     },
     "memory": {
       "command": "node",
       "args": [
-        "/home/USERNAME/.local/share/brave-agent/memory/server.mjs"
+        "/home/USERNAME/.local/share/brave-agent/plugin/memory/server.mjs"
       ]
     }
   }

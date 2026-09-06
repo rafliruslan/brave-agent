@@ -202,6 +202,27 @@ for d in ('slack.com','google.com'):
 
 A near-zero cookie count means you are looking at the wrong profile.
 
+## 5b. Install the two local servers' dependencies
+
+`brave` and `devtools` come from npm at run time via `npx`. The other two,
+`brave-repl` and `memory`, are files in this plugin, and `node_modules/` is not
+shipped inside it. Without this step they fail to start and you lose `snapshot`,
+`act`, `fetch` and the site notes, leaving only the two npx servers:
+
+```bash
+npm --prefix "$CLAUDE_PLUGIN_ROOT/repl" install
+npm --prefix "$CLAUDE_PLUGIN_ROOT/memory" install
+```
+
+Check they start. Each should print its tool list and then wait:
+
+```bash
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+  | node "$CLAUDE_PLUGIN_ROOT/repl/server.mjs"
+```
+
+An `ERR_MODULE_NOT_FOUND` here means the install above did not run.
+
 ## 6. Stop the browser stealing focus
 
 Every CDP tab-select and navigate makes the browser ask the window manager to
@@ -239,11 +260,16 @@ System Settings → Desktop & Dock → **Automatically rearrange Spaces based on
 most recent use**, so the agent raising a window does not reshuffle the Spaces
 the user is navigating by muscle memory.
 
-## 7. Confirm both MCP servers see it
+## 7. Confirm the MCP servers see it
 
-The plugin registers `brave` (Playwright) and `devtools` (chrome-devtools-mcp),
-both pointing at `127.0.0.1:9222`. Verify with `claude mcp list`, then list tabs
-through `mcp__brave__browser_tabs` and confirm the user's real tabs appear.
+The plugin registers four: `brave` (Playwright) and `devtools`
+(chrome-devtools-mcp), both pointing at `127.0.0.1:9222`, plus `brave-repl` and
+`memory` from this plugin's own directory. Verify with `claude mcp list`, then
+list tabs through `mcp__brave__browser_tabs` and confirm the user's real tabs
+appear.
+
+`brave-repl` is the one worth checking separately, since it is where `snapshot`,
+`act` and `fetch` live: `mcp__brave-repl__pages` should list the same tabs.
 
 Newly registered MCP servers do not expose their tools to an already-running
 session. If the tools are missing, the session needs restarting.

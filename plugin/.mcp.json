@@ -17,6 +17,14 @@
         "--browserUrl",
         "http://127.0.0.1:9222"
       ]
+    },
+    "brave-repl": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/repl/server.mjs"]
+    },
+    "memory": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/memory/server.mjs"]
     }
   }
 }

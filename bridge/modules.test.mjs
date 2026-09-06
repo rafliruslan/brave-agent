@@ -53,3 +53,47 @@ test('every entrypoint parses', async () => {
     );
   }
 });
+
+/**
+ * Every sibling export that index.mjs USES, it must also import.
+ *
+ * index.mjs is checked with --check rather than imported, because importing it
+ * opens a Slack socket. --check is a syntax check: it happily accepts a call to
+ * a name that does not exist. That gap shipped a bridge whose every run died on
+ * "createRunRegistry is not defined", with the launchd service restarting into
+ * the same crash every 30 seconds.
+ *
+ * So: for each module in this directory, take its exported names, see which of
+ * them index.mjs references, and require that those are imported from it.
+ */
+test('index.mjs imports every sibling export it uses', async () => {
+  const index = await readFile(new URL('index.mjs', HERE), 'utf8');
+
+  // What index.mjs imports, by name.
+  const imported = new Set();
+  for (const m of index.matchAll(/import\s*\{([^}]+)\}\s*from/g)) {
+    for (const part of m[1].split(',')) {
+      const name = part.trim().split(/\s+as\s+/).pop();
+      if (name) imported.add(name);
+    }
+  }
+
+  const files = (await readdir(HERE)).filter(
+    (f) => f.endsWith('.mjs') && !f.endsWith('.test.mjs') && f !== 'index.mjs',
+  );
+
+  const missing = [];
+  for (const f of files) {
+    const src = await readFile(new URL(f, HERE), 'utf8');
+    for (const m of src.matchAll(/^export\s+(?:async\s+)?(?:function|const|class)\s+([A-Za-z_$][\w$]*)/gm)) {
+      const name = m[1];
+      if (imported.has(name)) continue;
+      // Used as a call, a constructor, or a bare reference followed by a token
+      // that means "this is being evaluated".
+      const used = new RegExp(`(?<![\\w$.])${name}\\s*[({]`).test(index);
+      if (used) missing.push(`${name} (exported by ${f})`);
+    }
+  }
+
+  assert.deepEqual(missing, [], `index.mjs uses these without importing them:\n  ${missing.join('\n  ')}`);
+});

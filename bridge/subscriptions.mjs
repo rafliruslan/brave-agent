@@ -126,6 +126,29 @@ export function shouldHandle(event, { botUserId, allowedUser, subscribed } = {})
   return Boolean(subscribed);
 }
 
+/**
+ * May this message interrupt a run?
+ *
+ * shouldHandle ends with `return Boolean(subscribed)`, and a thread only
+ * becomes subscribed after the agent has REPLIED. During the run you actually
+ * want to stop, it has not replied yet, so an interrupt sent then was dropped
+ * before anything looked at it. Found by sending `!stop` to a live run and
+ * watching it finish regardless.
+ *
+ * So this is shouldHandle without the subscription clause, and with every
+ * other clause kept. The security boundary is unchanged: still one person,
+ * still not the agent, still a thread reply.
+ */
+export function canInterrupt(event, { botUserId, allowedUser } = {}) {
+  if (!event) return false;
+  if (event.bot_id) return false;
+  if (botUserId && event.user === botUserId) return false;
+  if (event.subtype && event.subtype !== 'file_share') return false;
+  if (allowedUser && event.user !== allowedUser) return false;
+  if (!event.thread_ts || event.thread_ts === event.ts) return false;
+  return true;
+}
+
 /** Words that end a subscription, so leaving a thread needs no admin UI. */
 const STOP = /^\s*(stop|quiet|shush|stand down|that is all|thats all|nevermind|never mind)\s*[.!]?\s*$/i;
 

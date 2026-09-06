@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createSubscriptionStore, shouldHandle, isStopPhrase } from './subscriptions.mjs';
+import { createSubscriptionStore, shouldHandle, isStopPhrase, canInterrupt } from './subscriptions.mjs';
 
 const BOT = 'UBOT1';
 const RAFLI = 'URAFLI';
@@ -135,4 +135,52 @@ test('a corrupt store is treated as empty', async () => {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+// --- interrupting ----------------------------------------------------------
+//
+// shouldHandle ends with `return Boolean(subscribed)`, and a thread is only
+// subscribed after the agent has REPLIED. So during the very run you want to
+// stop, the thread is not yet subscribed and the message is dropped. Found by
+// sending !stop to a live run and watching it count to 40 regardless.
+
+test('an interrupt is allowed in a thread that is not subscribed yet', () => {
+  assert.equal(
+    canInterrupt({ user: 'U1', thread_ts: '1.1', ts: '2.2' }, { allowedUser: 'U1', botUserId: 'B1' }),
+    true,
+  );
+});
+
+test('an interrupt from anyone else is refused', () => {
+  // Same security boundary as everything else: one person drives the agent.
+  assert.equal(
+    canInterrupt({ user: 'U2', thread_ts: '1.1', ts: '2.2' }, { allowedUser: 'U1', botUserId: 'B1' }),
+    false,
+  );
+});
+
+test('the agent cannot interrupt itself', () => {
+  assert.equal(
+    canInterrupt({ user: 'B1', thread_ts: '1.1', ts: '2.2' }, { allowedUser: 'U1', botUserId: 'B1' }),
+    false,
+  );
+  assert.equal(
+    canInterrupt({ bot_id: 'B9', thread_ts: '1.1', ts: '2.2' }, { allowedUser: 'U1', botUserId: 'B1' }),
+    false,
+  );
+});
+
+test('a top-level message is not an interrupt', () => {
+  assert.equal(
+    canInterrupt({ user: 'U1', ts: '2.2' }, { allowedUser: 'U1', botUserId: 'B1' }),
+    false,
+  );
+});
+
+test('an edit or a join is not an interrupt', () => {
+  assert.equal(
+    canInterrupt({ user: 'U1', thread_ts: '1.1', ts: '2.2', subtype: 'message_changed' },
+      { allowedUser: 'U1', botUserId: 'B1' }),
+    false,
+  );
 });

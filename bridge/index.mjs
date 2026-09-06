@@ -27,8 +27,10 @@ import { healBrowser } from './browser-health.mjs';
 import { pickModel, stripDirective } from './router.mjs';
 import { acquire, release } from './lock.mjs';
 import { react, settle, setStatus, WORKING } from './status.mjs';
-import { createSubscriptionStore, shouldHandle, isStopPhrase } from './subscriptions.mjs';
+import { createSubscriptionStore, shouldHandle, isStopPhrase, canInterrupt } from './subscriptions.mjs';
 import { allowedTools, browserCdpUrl, BASE_TOOLS } from './browser.mjs';
+import { parseInterrupt } from './interrupt.mjs';
+import { createRunRegistry } from './runs.mjs';
 
 const { App } = bolt;
 
@@ -224,6 +226,16 @@ async function main() {
   // reply is enough until the subscription expires or is stopped.
   app.event('message', async ({ event, client }) => {
     if (!channelAllowed(ALLOWED_CHANNEL, event.channel)) return;
+
+    // Before the subscription gate, deliberately. A thread is subscribed only
+    // after the agent has replied, so during the run you want to stop it is
+    // not subscribed yet and shouldHandle drops the message. canInterrupt
+    // keeps every other check, including who is allowed to drive the agent.
+    if (canInterrupt(event, { botUserId, allowedUser: ALLOWED_USER })
+        && await handleInterrupt({ event, client, text: event.text })) {
+      return;
+    }
+
     const subscribed = await subscriptions.isSubscribed(event.thread_ts);
     if (!shouldHandle(event, { botUserId, allowedUser: ALLOWED_USER, subscribed })) return;
     if (isStopPhrase(event.text)) {

@@ -232,8 +232,61 @@ async function main() {
       console.log(`[agent] unfollowed ${event.thread_ts}`);
       return;
     }
+    if (await handleInterrupt({ event, client, text: event.text })) return;
     await handleTurn({ event, client, text: event.text });
   });
+
+  const runs = createRunRegistry({ log: console });
+
+  /**
+   * Cut into a thread that is already working.
+   *
+   * This deliberately runs BEFORE queue.add. Queueing an interrupt would put
+   * it behind the very run it is trying to end, which is the whole problem:
+   * today a "no, stop" reply is read only after the agent has finished doing
+   * the wrong thing.
+   *
+   * @returns {Promise<boolean>} true when the message was an interrupt and is
+   *   fully handled, so the caller must not also treat it as a turn.
+   */
+  async function handleInterrupt({ event, client, text }) {
+    const parsed = parseInterrupt(text ?? event.text);
+    if (!parsed) return false;
+
+    const threadTs = event.thread_ts || event.ts;
+    // Read before stopping: the handle goes away with the run.
+    const startedBy = runs.startedBy(threadTs);
+    const stopped = runs.stop(threadTs);
+
+    // Clear the progress signals the run set, by the same calls a normal finish
+    // uses, and against the message that STARTED it rather than this one.
+    // Skipping this leaves a 👀 on the original message and a pending record
+    // the next boot sweeps up and apologises for.
+    await setStatus(client, { channel: event.channel, threadTs, status: '', logger: console });
+    if (startedBy) {
+      await settle(client, { channel: startedBy.channel, ts: startedBy.ts, ok: false, logger: console });
+      await pendingStore.remove(startedBy.channel, startedBy.ts);
+    }
+
+    if (parsed.stop) {
+      await client.chat.postMessage({
+        channel: event.channel,
+        thread_ts: threadTs,
+        text: stopped
+          ? 'Stopped. Whatever it was partway through stays partway through.'
+          : 'Nothing was running.',
+      });
+      console.log(`[agent] stop ${threadTs} (killed=${stopped})`);
+      return true;
+    }
+
+    console.log(`[agent] steer ${threadTs} (killed=${stopped})`);
+    // Re-enter as an ordinary turn carrying the new instruction. The session
+    // id comes from the thread, so the conversation continues; only the step
+    // that was in flight is lost.
+    await handleTurn({ event, client, text: parsed.prompt });
+    return true;
+  }
 
   // One path for both entry points: a mention, and a reply in a followed thread.
   async function handleTurn({ event, client, text }) {
@@ -334,6 +387,7 @@ async function main() {
           effort: route.effort,
           mcpConfig: MCP_CONFIG,
           allowedTools: ALLOWED_TOOLS,
+          onSpawn: (child) => runs.track(threadTs, child, { channel, ts: event.ts }),
         });
 
         // Belt and braces for the same failure arriving another way: if the id
@@ -350,6 +404,7 @@ async function main() {
             effort: route.effort,
             mcpConfig: MCP_CONFIG,
             allowedTools: ALLOWED_TOOLS,
+          onSpawn: (child) => runs.track(threadTs, child, { channel, ts: event.ts }),
           });
         }
 
@@ -368,6 +423,7 @@ async function main() {
             effort: route.effort,
             mcpConfig: MCP_CONFIG,
             allowedTools: ALLOWED_TOOLS,
+          onSpawn: (child) => runs.track(threadTs, child, { channel, ts: event.ts }),
           });
           if (result.ok) await sessions.set(threadTs, freshId);
         } else if (result.ok) {
@@ -410,6 +466,7 @@ async function main() {
   }
 
   app.event('app_mention', async ({ event, client }) => {
+    if (await handleInterrupt({ event, client, text: event.text })) return;
     await handleTurn({ event, client, text: event.text });
   });
 

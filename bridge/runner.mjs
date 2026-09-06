@@ -145,6 +145,7 @@ export function runAgent({
   timeoutMs = DEFAULT_TIMEOUT_MS,
   bin = 'claude',
   spawnFn = spawn,
+  onSpawn = null,
 } = {}) {
   return new Promise((resolve) => {
     const args = buildArgs({ prompt, sessionId, isNew, model, effort, permissionMode, mcpConfig, allowedTools, deniedTools });
@@ -155,6 +156,18 @@ export function runAgent({
       stdio: ['ignore', 'pipe', 'pipe'],
       env: process.env,
     });
+
+    // Handed out so a caller can stop this run. The child was previously
+    // reachable only from inside here, which is why the bridge could start a
+    // run and then had no way to end one.
+    if (typeof onSpawn === 'function') {
+      try {
+        onSpawn(child);
+      } catch (err) {
+        // A broken listener must not take the run down with it.
+        console.error(`[runner] onSpawn threw: ${err.message}`);
+      }
+    }
 
     let stdout = '';
     let stderr = '';

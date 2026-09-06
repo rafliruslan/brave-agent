@@ -3,7 +3,15 @@
     "aside": {
       "type": "stdio",
       "command": "/Users/USERNAME/.local/bin/aside",
-      "args": ["mcp"]
+      "args": [
+        "mcp"
+      ]
+    },
+    "memory": {
+      "command": "node",
+      "args": [
+        "/Users/USERNAME/.local/share/brave-agent/memory/server.mjs"
+      ]
     }
   }
 }

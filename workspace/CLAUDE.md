@@ -46,6 +46,11 @@ integration: there is no vendor API layer underneath you.
 One fact per file, grouped by kind. Read what the task needs; do not read the
 whole tree.
 
+`mcp__memory__search` is the cheapest way in when you know the question but not
+the file: it returns the matching sections, not the files holding them. Matching
+is on words, not meaning, so pass the terms the note would use. Read the file
+directly when the table below already tells you which one it is.
+
 | File | Contents |
 |---|---|
 | `memory/agent/environment.md` | This machine, the browser, what replaced what |

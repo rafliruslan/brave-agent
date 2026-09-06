@@ -27,7 +27,7 @@ Slack (Socket Mode)
                     └─→ your real Brave, already logged in
 ```
 
-## Three parts, usable separately
+## Four parts, usable separately
 
 | | |
 |---|---|
@@ -35,6 +35,7 @@ Slack (Socket Mode)
 | **`bridge/`** | The harness. A Slack Socket Mode daemon that maps threads to sessions, serialises work per thread, survives restarts, and recovers its own orphaned messages. |
 | **`workspace/`** | The agent's memory and skills, as a starting template. Semantic memory it reads on demand, procedural skills it can extend itself. |
 | **`repl/`** | A third MCP server of our own: accessibility snapshots that return a **diff** rather than the whole tree. See `repl/README.md`. |
+| **`memory/`** | A fourth: ranked search over `workspace/memory/` that returns matching **sections** rather than files. Listed in both browser configs, so the agent has it on either machine. |
 
 ## It learns while you use it
 

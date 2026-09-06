@@ -1,0 +1,10 @@
+{
+  "name": "brave-agent-memory-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Ranked section search over the agent's memory files",
+  "main": "server.mjs",
+  "scripts": { "test": "node --test" },
+  "dependencies": { "@modelcontextprotocol/sdk": "^1.0.0" }
+}

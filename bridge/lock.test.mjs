@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { acquire, release, isAlive } from './lock.mjs';
+import { acquire, release, isAlive, stillHeld, bootTime } from './lock.mjs';
 
 async function withLock(fn) {
   const dir = await mkdtemp(join(tmpdir(), 'brave-lock-'));
@@ -111,4 +111,59 @@ test('release on a missing lock is a no-op', async () => {
   await withLock(async (path) => {
     assert.equal(await release({ path, pid: 111 }), false);
   });
+});
+
+// --- boot time -------------------------------------------------------------
+//
+// A lock records a pid, and isAlive() only proves that SOME process has that
+// pid. After a reboot pids are reassigned, so a lock left behind by a killed
+// bridge can be "held" by whatever inherits its number. Observed: the bridge
+// was down for three days because pid 1018 came back as an Apple XPC service
+// 36 seconds after boot, and launchd retried against it every 30 seconds.
+
+test('a lock taken before this boot is stale, whatever the pid says now', () => {
+  const boot = Date.parse('2026-09-06T02:10:00Z');
+  const held = { pid: 1018, since: '2026-09-03T04:35:34.422Z' };
+  assert.equal(stillHeld(held, { pid: 99, alive: () => true, boot }), false);
+});
+
+test('a lock taken after boot with a live pid is held', () => {
+  const boot = Date.parse('2026-09-06T02:10:00Z');
+  const held = { pid: 1018, since: '2026-09-06T03:00:00.000Z' };
+  assert.equal(stillHeld(held, { pid: 99, alive: () => true, boot }), true);
+});
+
+test('a lock taken after boot with a dead pid is stale', () => {
+  const boot = Date.parse('2026-09-06T02:10:00Z');
+  const held = { pid: 1018, since: '2026-09-06T03:00:00.000Z' };
+  assert.equal(stillHeld(held, { pid: 99, alive: () => false, boot }), false);
+});
+
+test('our own lock is never held against us', () => {
+  const boot = Date.parse('2026-09-06T02:10:00Z');
+  const held = { pid: 42, since: '2026-09-06T03:00:00.000Z' };
+  assert.equal(stillHeld(held, { pid: 42, alive: () => true, boot }), false);
+});
+
+test('a lock with no usable timestamp falls back to the pid check', () => {
+  // Old lock files predate this field. Refusing to start on them would be a
+  // worse bug than the one being fixed.
+  const boot = Date.parse('2026-09-06T02:10:00Z');
+  assert.equal(stillHeld({ pid: 1018 }, { pid: 99, alive: () => true, boot }), true);
+  assert.equal(stillHeld({ pid: 1018, since: 'nonsense' }, { pid: 99, alive: () => true, boot }), true);
+});
+
+test('a lock taken in the first seconds after boot is NOT called stale', () => {
+  // The two mistakes are not symmetric. Wrongly "held" stops the bridge
+  // starting, which is loud and safe. Wrongly "stale" starts a second bridge,
+  // and then every mention is answered twice by two disagreeing agents. So
+  // clock jitter around boot must resolve towards held.
+  const boot = Date.parse('2026-09-06T02:10:00Z');
+  const held = { pid: 1018, since: '2026-09-06T02:09:58.000Z' }; // 2s before boot
+  assert.equal(stillHeld(held, { pid: 99, alive: () => true, boot }), true);
+});
+
+test('bootTime is derived from uptime, so it works on Linux and macOS alike', () => {
+  const now = Date.parse('2026-09-06T03:00:00Z');
+  assert.equal(bootTime(now, () => 3600), Date.parse('2026-09-06T02:00:00Z'));
 });

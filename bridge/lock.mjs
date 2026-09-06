@@ -14,10 +14,18 @@
  * A dead holder must never block a restart, so the lock records a pid and is
  * taken over when that pid is gone. `process.kill(pid, 0)` sends no signal, it
  * only asks whether the process exists.
+ *
+ * That question is not the one we need answered. It proves SOME process has
+ * that pid, not that it is the bridge. Pids are reassigned across a reboot, so
+ * a lock left behind by a killed bridge gets adopted by whatever inherits its
+ * number. This bridge sat down for three days because pid 1018 came back as an
+ * Apple XPC service 36 seconds after boot, and launchd retried against it every
+ * 30 seconds, refusing to start each time. Hence the boot-time check: a lock
+ * taken before this boot cannot have a live holder, whatever its pid says now.
  */
 import { readFile, writeFile, unlink, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { homedir, hostname } from 'node:os';
+import { homedir, hostname, uptime } from 'node:os';
 
 export const DEFAULT_LOCK_PATH = join(
   homedir(), '.local', 'state', 'brave-agent', 'bridge.lock',
@@ -36,6 +44,47 @@ export function isAlive(pid, kill = process.kill) {
 }
 
 /**
+ * Roughly when this machine booted, in ms since the epoch.
+ *
+ * From `os.uptime()` rather than `sysctl kern.boottime`, because this runs on
+ * Linux and macOS and uptime is the same call on both.
+ */
+export function bootTime(now = Date.now(), up = uptime) {
+  return now - up() * 1000;
+}
+
+/**
+ * Grace for the boot-time comparison. Uptime is a rounded number of seconds and
+ * a lock can be written in the first moments after boot, so a strict comparison
+ * would occasionally call a live lock stale.
+ *
+ * The two mistakes are not symmetric, which is why the grace exists and why it
+ * points this way. Wrongly "held" stops the bridge starting, and someone sees a
+ * clear line in the log saying so. Wrongly "stale" starts a second bridge, and
+ * then Slack delivers every mention to both and two agents answer the same
+ * thread with two different results, erroring nowhere.
+ */
+const BOOT_GRACE_MS = 60_000;
+
+/**
+ * Is this lock still held by someone else?
+ *
+ * Pure, so the awkward cases can be tested without rebooting anything.
+ */
+export function stillHeld(held, { pid = process.pid, alive = isAlive, boot = bootTime() } = {}) {
+  if (!held || held.pid === pid) return false;
+
+  // A lock older than this boot is a corpse regardless of who holds its pid now.
+  // An unparseable or absent timestamp means an older lock file, and refusing
+  // to start on those would be a worse bug than the one this fixes: fall back
+  // to the pid check.
+  const since = Date.parse(held.since);
+  if (Number.isFinite(since) && since < boot - BOOT_GRACE_MS) return false;
+
+  return alive(held.pid);
+}
+
+/**
  * Claim the lock. Returns { ok: true } on success, or { ok: false, holder }
  * naming who has it, so the caller can log something useful and exit.
  */
@@ -47,7 +96,7 @@ export async function acquire({ path = DEFAULT_LOCK_PATH, pid = process.pid, ali
     // Absent or unreadable, treat as free.
   }
 
-  if (held && held.pid !== pid && alive(held.pid)) {
+  if (stillHeld(held, { pid, alive })) {
     return { ok: false, holder: held };
   }
 

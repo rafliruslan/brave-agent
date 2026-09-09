@@ -3,6 +3,19 @@
 <!--
   macOS counterpart of systemd/brave-agent-routines.{service,timer}: scheduled routines.
   StartInterval replaces the timer; launchd has no separate timer unit.
+
+  StartInterval is 60, not 900, and that matters. isDue matches the minute
+  exactly, while StartInterval counts from whenever the job loaded rather than
+  from the wall clock. At 900 it only ever samples four minute-values - load at
+  11:47 and it checks 02, 17, 32, 47 - so a "0 9 * * *" routine is never even
+  looked at. It would appear installed and silently never fire, which is the
+  failure the isDue comment already warns about. At 60 every minute is checked
+  once, so any schedule works. The cost is a node start per minute that reads
+  three files and exits when nothing is due.
+
+  AGENT_WORKSPACE must be set: routines.mjs otherwise looks in
+  ~/.local/share/brave-agent/workspace, finds no routines, and reports
+  "nothing due" forever. launchd does not expand ~ or $HOME.
 -->
 <plist version="1.0">
 <dict>
@@ -19,9 +32,11 @@
     <dict>
         <key>PATH</key>
         <string>/Users/USERNAME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>AGENT_WORKSPACE</key>
+        <string>/Users/USERNAME/.local/share/brave-agent/workspace</string>
     </dict>
     <key>StartInterval</key>
-    <integer>900</integer>
+    <integer>60</integer>
     <key>RunAtLoad</key>
     <false/>
     <key>StandardOutPath</key>

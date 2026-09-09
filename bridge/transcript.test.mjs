@@ -157,3 +157,27 @@ test('a task that is not a thread dump is left alone', () => {
   const s = summarise('abc', userText(prompt('help turn on the tailscale on my mac')));
   assert.equal(s.task, 'help turn on the tailscale on my mac');
 });
+
+// --- choosing which transcript to read -------------------------------------
+
+import { chooseTranscripts } from './transcript.mjs';
+
+test('our own transcript wins where we have one', () => {
+  const got = chooseTranscripts({
+    mine: ['/ws/transcripts/a.jsonl'],
+    theirs: ['/proj/a.jsonl'],
+  });
+  assert.deepEqual(got.get('a'), { path: '/ws/transcripts/a.jsonl', source: 'bridge' });
+});
+
+test("Claude Code's copy still lists the sessions that predate ours", () => {
+  // Otherwise every session before this shipped vanishes from the listing on
+  // the day it ships.
+  const got = chooseTranscripts({ mine: ['/ws/transcripts/new.jsonl'], theirs: ['/proj/old.jsonl'] });
+  assert.deepEqual([...got.keys()].sort(), ['new', 'old']);
+  assert.equal(got.get('old').source, 'claude');
+});
+
+test('neither directory existing is empty, not an error', () => {
+  assert.equal(chooseTranscripts().size, 0);
+});

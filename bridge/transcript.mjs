@@ -14,7 +14,30 @@
  * prepended to turn one, a half-written line at the end of a live session) are
  * testable without a transcript on disk.
  */
+import { basename } from 'node:path';
 import { sessionIdFor } from './sessions.mjs';
+
+/**
+ * Which file to read each session from, given both sets of transcripts.
+ *
+ * Ours wins where we have it. Claude Code's copy fills in the sessions that
+ * ran before the bridge kept its own, so nothing drops out of the listing the
+ * day this ships; each session moves over the next time it runs.
+ *
+ * A session that straddles the switch reads slightly short for one listing:
+ * our copy begins at the turn we started mirroring, so its task line is that
+ * turn rather than the thread's opening one. That is the price of not reading
+ * a file whose schema we do not control, and it clears itself.
+ *
+ * @param {{mine: string[], theirs: string[]}} paths  full paths to .jsonl files
+ * @returns {Map<string, {path: string, source: 'bridge'|'claude'}>}
+ */
+export function chooseTranscripts({ mine = [], theirs = [] } = {}) {
+  const out = new Map();
+  for (const path of theirs) out.set(basename(path, '.jsonl'), { path, source: 'claude' });
+  for (const path of mine) out.set(basename(path, '.jsonl'), { path, source: 'bridge' });
+  return out;
+}
 
 /**
  * The bridge builds one prompt from three parts joined by markdown rules:

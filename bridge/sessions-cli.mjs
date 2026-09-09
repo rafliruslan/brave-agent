@@ -16,8 +16,9 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, basename } from 'node:path';
-import { summarise, threadIndex, relativeAge } from './transcript.mjs';
+import { summarise, threadIndex, relativeAge, chooseTranscripts } from './transcript.mjs';
 import { DEFAULT_STATE_PATH } from './sessions.mjs';
+import { transcriptPathFor } from './mirror.mjs';
 
 const WORKSPACE = process.env.AGENT_WORKSPACE
   || join(homedir(), '.local', 'share', 'brave-agent', 'workspace');
@@ -26,9 +27,31 @@ const WORKSPACE = process.env.AGENT_WORKSPACE
  * Claude Code stores a project's transcripts under a slug of its cwd, with
  * every non-alphanumeric run replaced by a dash. The bridge runs the agent with
  * cwd = the workspace, so that path is what identifies the sessions.
+ *
+ * Only a fallback now. The bridge mirrors its own transcripts, and this is
+ * where the sessions that predate it still live.
  */
 function projectDir(cwd) {
   return join(homedir(), '.claude', 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'));
+}
+
+/** The .jsonl files in a directory, as full paths, or none if it is absent. */
+async function transcriptsIn(dir) {
+  try {
+    return (await readdir(dir))
+      .filter((f) => f.endsWith('.jsonl'))
+      .map((f) => join(dir, f));
+  } catch {
+    return [];
+  }
+}
+
+/** Every session to list, ours preferred over Claude Code's. */
+async function sources(workspace) {
+  return chooseTranscripts({
+    mine: await transcriptsIn(join(workspace, 'transcripts')),
+    theirs: await transcriptsIn(projectDir(workspace)),
+  });
 }
 
 /**
@@ -59,12 +82,10 @@ async function main() {
     return;
   }
 
-  const dir = projectDir(WORKSPACE);
-  let files;
-  try {
-    files = (await readdir(dir)).filter((f) => f.endsWith('.jsonl'));
-  } catch {
-    console.error(`No sessions found. Looked in ${dir}`);
+  const found = await sources(WORKSPACE);
+  if (found.size === 0) {
+    console.error(`No sessions found. Looked in ${join(WORKSPACE, 'transcripts')}`);
+    console.error(`and ${projectDir(WORKSPACE)}`);
     console.error(`(derived from AGENT_WORKSPACE=${WORKSPACE})`);
     process.exit(1);
   }
@@ -79,16 +100,14 @@ async function main() {
   const index = threadIndex(threads);
 
   const rows = [];
-  for (const f of files) {
-    const path = join(dir, f);
-    const id = basename(f, '.jsonl');
+  for (const [id, { path, source }] of found) {
     const { mtimeMs } = await stat(path);
     const s = summarise(id, await readFile(path, 'utf8').catch(() => ''));
     // Prefer the channel and thread the prompt names: it carries the channel
     // too, and it survives threads.json's weekly prune. The hash index is the
     // fallback for a transcript whose prompt did not say.
     const threadTs = s.slack?.threadTs || index[id] || null;
-    rows.push({ ...s, when: mtimeMs, threadTs, channel: s.slack?.channel || null });
+    rows.push({ ...s, when: mtimeMs, threadTs, source, channel: s.slack?.channel || null });
   }
   rows.sort((a, b) => b.when - a.when);
   const shown = rows.slice(0, args.limit);
@@ -98,10 +117,6 @@ async function main() {
     return;
   }
 
-  if (shown.length === 0) {
-    console.log(`No sessions in ${dir}`);
-    return;
-  }
 
   const age = (r) => relativeAge(r.when);
   const wAge = Math.max(...shown.map((r) => age(r).length));
@@ -115,7 +130,9 @@ async function main() {
     }
   }
 
-  console.log(`\n${shown.length} of ${rows.length} sessions in ${dir}`);
+  const ours = rows.filter((r) => r.source === 'bridge').length;
+  console.log(`\n${shown.length} of ${rows.length} sessions`);
+  console.log(`${ours} from ${join(WORKSPACE, 'transcripts')}, ${rows.length - ours} from ${projectDir(WORKSPACE)}`);
   console.log(`Resume one:  cd ${WORKSPACE} && claude --resume <id>`);
   // Said here rather than discovered later: the transcript is the same, the
   // authority is not. The bridge runs the agent with its own allowlist and

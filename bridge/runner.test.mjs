@@ -112,3 +112,27 @@ test('without a transcript path the run still parses its result', async () => {
   assert.equal(res.ok, true);
   assert.equal(res.text, 'done');
 });
+
+test('the transcript records what was asked, which the stream never echoes', async () => {
+  // Its `user` events are tool results, not the prompt. Without this every
+  // mirrored session listed as "(no task recorded)" and lost its permalink.
+  const path = join(await mkdtemp(join(tmpdir(), 'runner-')), 'abc.jsonl');
+  await runAgent({
+    ...base,
+    prompt: 'check the affiliate queue',
+    transcriptPath: path,
+    spawnFn: fakeSpawn([line(RESULT)]),
+  });
+  const first = JSON.parse((await readFile(path, 'utf8')).split('\n')[0]);
+  assert.equal(first.type, 'user');
+  assert.equal(first.message.content, 'check the affiliate queue');
+});
+
+test('a run that dies instantly still records what it was asked', async () => {
+  const path = join(await mkdtemp(join(tmpdir(), 'runner-')), 'abc.jsonl');
+  const res = await runAgent({
+    ...base, prompt: 'the ask', transcriptPath: path, spawnFn: fakeSpawn([], 1),
+  });
+  assert.equal(res.ok, false);
+  assert.equal((await readFile(path, 'utf8')).includes('the ask'), true);
+});

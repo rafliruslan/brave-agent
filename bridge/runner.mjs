@@ -192,6 +192,10 @@ export function runAgent({
     let buffered = '';
     let range = null;
     const mirror = createMirror();
+    // What was asked, first, because the stream will never say. On a resumed
+    // thread this is that turn's prompt, and the first one in the file is the
+    // one the listing shows.
+    mirror.record({ type: 'user', message: { content: prompt } });
 
     const timer = setTimeout(() => {
       timedOut = true;

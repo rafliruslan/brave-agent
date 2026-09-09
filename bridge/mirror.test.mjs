@@ -164,3 +164,14 @@ test('a second turn appends after the first', async () => {
 test('a transcript is named by its session id under the workspace', () => {
   assert.equal(transcriptPathFor('/ws', 'abc'), '/ws/transcripts/abc.jsonl');
 });
+
+test('a record we write ourselves is held to the same allowlist', async () => {
+  const path = join(await tmp(), 'r.jsonl');
+  const m = createMirror();
+  m.record({ type: 'user', message: { content: 'do the thing' } });
+  m.record({ type: 'system', subtype: 'hook_started' });
+  await m.writeTo(path);
+  const written = await readFile(path, 'utf8');
+  assert.equal(written.includes('do the thing'), true);
+  assert.equal(written.includes('hook_started'), false);
+});

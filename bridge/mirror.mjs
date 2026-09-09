@@ -110,6 +110,21 @@ export function createMirror() {
     },
 
     /**
+     * Add a record we wrote ourselves, held to the same allowlist.
+     *
+     * The stream never echoes the prompt back - its `user` events are tool
+     * results - so without this a transcript says what the agent did and
+     * nothing about what it was asked. Every mirrored session listed as
+     * "(no task recorded)" and lost its Slack permalink with it, since both
+     * are read off the prompt. Claude Code's own transcript opens with this
+     * same shape, so ours stays readable by the same code.
+     */
+    record(obj) {
+      if (keepLine(obj)) kept.push(JSON.stringify(obj));
+      return obj;
+    },
+
+    /**
      * Append the turn, and report the range it occupies.
      *
      * `offset` is the file's length before this write and `bytes` is what the

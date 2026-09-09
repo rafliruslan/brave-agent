@@ -23,6 +23,7 @@ import { fetchThreadContext, composeTask, locationNote } from './thread.mjs';
 import { parseMention, formatResult } from './text.mjs';
 import { buildBlocks } from './blocks.mjs';
 import { runAgent } from './runner.mjs';
+import { transcriptPathFor } from './mirror.mjs';
 import { healBrowser } from './browser-health.mjs';
 import { pickModel, stripDirective } from './router.mjs';
 import { acquire, release } from './lock.mjs';
@@ -399,6 +400,7 @@ async function main() {
           effort: route.effort,
           mcpConfig: MCP_CONFIG,
           allowedTools: ALLOWED_TOOLS,
+          transcriptPath: transcriptPathFor(WORKSPACE, sessionId),
           onSpawn: (child) => runs.track(threadTs, child, { channel, ts: event.ts }),
         });
 
@@ -416,7 +418,8 @@ async function main() {
             effort: route.effort,
             mcpConfig: MCP_CONFIG,
             allowedTools: ALLOWED_TOOLS,
-          onSpawn: (child) => runs.track(threadTs, child, { channel, ts: event.ts }),
+            transcriptPath: transcriptPathFor(WORKSPACE, sessionId),
+            onSpawn: (child) => runs.track(threadTs, child, { channel, ts: event.ts }),
           });
         }
 
@@ -435,7 +438,8 @@ async function main() {
             effort: route.effort,
             mcpConfig: MCP_CONFIG,
             allowedTools: ALLOWED_TOOLS,
-          onSpawn: (child) => runs.track(threadTs, child, { channel, ts: event.ts }),
+            transcriptPath: transcriptPathFor(WORKSPACE, freshId),
+            onSpawn: (child) => runs.track(threadTs, child, { channel, ts: event.ts }),
           });
           if (result.ok) await sessions.set(threadTs, freshId);
         } else if (result.ok) {

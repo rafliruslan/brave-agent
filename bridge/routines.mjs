@@ -31,7 +31,9 @@
 import { readFile, writeFile, readdir, mkdir } from 'node:fs/promises';
 import { join, dirname, basename } from 'node:path';
 import { homedir } from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { runAgent } from './runner.mjs';
+import { transcriptPathFor } from './mirror.mjs';
 import { allowedTools } from './browser.mjs';
 import { healBrowser } from './browser-health.mjs';
 
@@ -266,9 +268,13 @@ async function main() {
       console.warn(`[browser-health] preflight failed, continuing: ${err.message}`);
     }
 
+    // A routine has no thread to derive an id from, so it makes one. It is
+    // what names the transcript, and without it the run would be the only kind
+    // of turn the bridge cannot show you afterwards.
+    const sessionId = randomUUID();
     const result = await runAgent({
       prompt: buildPrompt(name, body, meta),
-      sessionId: null,
+      sessionId,
       isNew: true,
       cwd: WORKSPACE,
       model: meta.model || 'sonnet',
@@ -277,6 +283,7 @@ async function main() {
       allowedTools: await allowedTools(MCP_CONFIG, { base: ROUTINE_BASE }),
       deniedTools: DENIED_TOOLS,
       timeoutMs: TIMEOUT_MS,
+      transcriptPath: transcriptPathFor(WORKSPACE, sessionId),
     });
 
     ran += 1;
@@ -285,6 +292,7 @@ async function main() {
       lastRun: now.toISOString(),
       ok: result.ok,
       cost: result.costUsd,
+      sessionId,
     };
     console.log(`[routines] ${name}: ${result.ok ? 'ok' : 'FAILED'}`);
     console.log(result.text.split('\n').slice(0, 12).join('\n'));

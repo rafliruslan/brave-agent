@@ -24,6 +24,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import { createMirror, splitLines, resultOf } from './mirror.mjs';
 
 /** A turn that outruns this is killed. Browser work is genuinely slow. */
 export const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
@@ -94,12 +95,21 @@ export const DENIED_TOOLS = [
   'mcp__devtools__evaluate_script',
 ];
 
-function buildArgs({ prompt, sessionId, isNew, model, effort, permissionMode, mcpConfig, allowedTools, deniedTools }) {
-  const args = ['-p', prompt, '--output-format', 'json'];
+export function buildArgs({ prompt, sessionId, isNew, model, effort, permissionMode, mcpConfig, allowedTools, deniedTools }) {
+  // stream-json rather than json, so the supervisor can mirror the run into a
+  // transcript it owns rather than reading Claude Code's. --verbose is not
+  // optional: the CLI refuses stream-json with --print without it.
+  const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose'];
 
   // A new thread ASSIGNS its deterministic id; a continuing thread resumes it.
-  if (isNew) args.push('--session-id', sessionId);
-  else args.push('--resume', sessionId);
+  // A new run with no id at all is legal - a routine has no thread to derive
+  // one from - and must not pass the flag, since spawn rejects a null argv
+  // entry and would take the whole run down before the CLI ever started.
+  if (isNew) {
+    if (sessionId) args.push('--session-id', sessionId);
+  } else {
+    args.push('--resume', sessionId);
+  }
 
   if (model) args.push('--model', model);
   // Both are per-invocation, so a resumed thread can escalate to a stronger
@@ -146,6 +156,7 @@ export function runAgent({
   bin = 'claude',
   spawnFn = spawn,
   onSpawn = null,
+  transcriptPath = null,
 } = {}) {
   return new Promise((resolve) => {
     const args = buildArgs({ prompt, sessionId, isNew, model, effort, permissionMode, mcpConfig, allowedTools, deniedTools });
@@ -173,6 +184,15 @@ export function runAgent({
     let stderr = '';
     let timedOut = false;
 
+    // Parsed stream objects and the transcript, both filled as the run
+    // streams; the result line is the last thing to arrive. The mirror exists
+    // from the first byte on purpose - opening the file first would race the
+    // CLI's opening chunks and lose them.
+    const objects = [];
+    let buffered = '';
+    let range = null;
+    const mirror = createMirror();
+
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill('SIGKILL');
@@ -180,6 +200,15 @@ export function runAgent({
 
     child.stdout.on('data', (d) => {
       stdout += d;
+      // Whole lines only. A chunk routinely cuts an object in half, and the
+      // last line of a killed run is half an object that must never be parsed
+      // or mirrored.
+      const split = splitLines(buffered, String(d));
+      buffered = split.rest;
+      for (const line of split.lines) {
+        const obj = mirror.take(line);
+        if (obj) objects.push(obj);
+      }
     });
     child.stderr.on('data', (d) => {
       stderr += d;
@@ -200,8 +229,19 @@ export function runAgent({
       });
     });
 
-    child.on('close', () => {
+    child.on('close', async () => {
       clearTimeout(timer);
+      // Flush the transcript before reporting. A killed run still wrote real
+      // bytes and they belong in the record; only the half line at the end is
+      // dropped, and splitLines never handed it over. A failed write must not
+      // take down a run that otherwise succeeded, so it is logged, not thrown.
+      if (transcriptPath) {
+        try {
+          range = await mirror.writeTo(transcriptPath);
+        } catch (err) {
+          console.error(`[runner] transcript mirror failed: ${err.message}`);
+        }
+      }
       const combined = `${stdout}\n${stderr}`;
 
       if (timedOut) {
@@ -217,11 +257,10 @@ export function runAgent({
         });
       }
 
-      let parsed = null;
-      try {
-        parsed = JSON.parse(stdout.trim());
-      } catch {
-        // Non-JSON on stdout means the CLI failed before it produced a result.
+      const parsed = resultOf(objects);
+      if (!parsed) {
+        // No result line means the CLI failed before it produced one, which is
+        // also exactly what a run killed by !stop looks like.
         return resolve({
           ok: false,
           text: combined.trim() || 'The agent produced no output.',
@@ -232,6 +271,7 @@ export function runAgent({
           costUsd: null,
           timedOut: false,
           raw: combined,
+          range,
         });
       }
 
@@ -251,6 +291,9 @@ export function runAgent({
         costUsd: typeof parsed.total_cost_usd === 'number' ? parsed.total_cost_usd : null,
         timedOut: false,
         raw: stdout,
+        // Where this turn's bytes landed in our transcript. Null when no
+        // transcript was asked for.
+        range,
       });
     });
   });

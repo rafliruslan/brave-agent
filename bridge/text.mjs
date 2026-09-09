@@ -1,5 +1,22 @@
 export const MAX_OUTPUT = 3500;
 
+/**
+ * Slack appends this to messages sent through some apps, INLINE with a space
+ * rather than on a new line: "stop" is delivered as
+ * "stop *Sent using* <@U0A8...>".
+ *
+ * Both isStopPhrase and parseInterrupt match the whole message, so without
+ * stripping it, unfollowing a thread and stopping a run both silently did
+ * nothing for anyone using that app. Anchored to the end, so prose that
+ * happens to discuss sending is untouched.
+ */
+const TRAILING_ATTRIBUTION = /\s*\*Sent using\*\s*<@[^>]+>\s*$/i;
+
+/** A message without the attribution Slack may have appended to it. */
+export function stripAttribution(text) {
+  return String(text ?? '').replace(TRAILING_ATTRIBUTION, '');
+}
+
 const TRUNCATION_MARKER = '\n… (truncated)';
 
 /**

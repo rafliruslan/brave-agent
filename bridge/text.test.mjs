@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseMention, truncateOutput, formatResult, toSlackText, isDeadSession, isMissingSession, MAX_OUTPUT } from './text.mjs';
+import { parseMention, truncateOutput, formatResult, toSlackText, isDeadSession, isMissingSession, MAX_OUTPUT, stripAttribution } from './text.mjs';
 
 // All observed in one live Slack reply: doubles rendered as literal asterisks
 // and a Markdown image tag pointed at a local file path.
@@ -305,4 +305,33 @@ test('isMissingSession ignores unrelated failures', () => {
 // An evicted session is dead in the same way a broken profile is: never resume.
 test('isDeadSession covers an evicted session too', () => {
   assert.equal(isDeadSession('Error Session not found: abc'), true);
+});
+
+// --- Slack's attribution suffix ---------------------------------------------
+//
+// Messages sent through the Claude Slack app arrive with an attribution
+// appended INLINE: "stop" is delivered as "stop *Sent using* <@U0A8...>".
+// isStopPhrase matches the whole message, so unfollowing a thread silently did
+// nothing for anyone using that app. parseInterrupt had the same bug.
+
+test('stripAttribution removes the inline suffix', () => {
+  assert.equal(stripAttribution('stop *Sent using* <@U0A8UAU3P3Q>'), 'stop');
+});
+
+test('stripAttribution removes it on its own line too', () => {
+  assert.equal(stripAttribution('stop\n*Sent using* <@U0A8UAU3P3Q>'), 'stop');
+});
+
+test('stripAttribution leaves an ordinary message alone', () => {
+  assert.equal(stripAttribution('tell me what you are sending'), 'tell me what you are sending');
+});
+
+test('stripAttribution is anchored to the end', () => {
+  const t = '*Sent using* <@U1> is what the footer says';
+  assert.equal(stripAttribution(t), t);
+});
+
+test('stripAttribution handles empty input', () => {
+  assert.equal(stripAttribution(''), '');
+  assert.equal(stripAttribution(null), '');
 });

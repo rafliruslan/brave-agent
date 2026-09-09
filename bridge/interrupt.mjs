@@ -19,26 +19,17 @@
  */
 
 /** Slack puts `<@Uxxxx>` in front of a mention. Not part of what was said. */
+import { stripAttribution } from './text.mjs';
+
 const LEADING_MENTION = /^\s*<@[^>]+>\s*/;
 
-/**
- * Slack appends this to messages sent through some apps, and appends it
- * INLINE with a space rather than on a new line: "!stop" is delivered as
- * "!stop *Sent using* <@U0A8...>". Logged off a live event after a first fix
- * assumed a newline and did nothing. Anchored to the end so ordinary prose
- * that happens to discuss sending is untouched.
- */
-const TRAILING_ATTRIBUTION = /\s*\*Sent using\*\s*<@[^>]+>\s*$/i;
 
 /**
  * @returns {{stop: boolean, prompt: string|null}|null} null when the message is
  *   not an interrupt at all.
  */
 export function parseInterrupt(text) {
-  const body = String(text ?? '')
-    .replace(LEADING_MENTION, '')
-    .replace(TRAILING_ATTRIBUTION, '')
-    .trim();
+  const body = stripAttribution(String(text ?? '').replace(LEADING_MENTION, '')).trim();
   if (!body.startsWith('!')) return null;
 
   // Only the first `!` is the marker. `!!` is someone leaning on the key, not

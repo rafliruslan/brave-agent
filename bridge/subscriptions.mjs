@@ -15,6 +15,7 @@
  * keeping it live means an offhand comment weeks later wakes the agent.
  */
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { stripAttribution } from './text.mjs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -153,5 +154,7 @@ export function canInterrupt(event, { botUserId, allowedUser } = {}) {
 const STOP = /^\s*(stop|quiet|shush|stand down|that is all|thats all|nevermind|never mind)\s*[.!]?\s*$/i;
 
 export function isStopPhrase(text) {
-  return STOP.test(String(text ?? ''));
+  // Stripped first: the attribution some Slack apps append is enough to stop
+  // the whole-message match, so "stop" sent from one never unfollowed.
+  return STOP.test(stripAttribution(text));
 }

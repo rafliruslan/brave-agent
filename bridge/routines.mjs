@@ -126,6 +126,41 @@ export function isDue(schedule, now = new Date()) {
   return { due, reason: due ? 'due' : 'not due' };
 }
 
+/**
+ * The key for one scheduled firing: `cron:<instant, to the minute, UTC>`.
+ *
+ * Derived from the instant the routine is FOR, not from when the tick happened
+ * to arrive, so a late or replayed fire produces the same key and collides
+ * instead of running twice.
+ *
+ * One clock throughout. What this replaces spliced a UTC date-hour onto local
+ * minutes, which agrees on whole-hour offsets and silently disagrees on
+ * +05:30 - a bug that shows up only as a routine firing twice, in one zone.
+ */
+export function fireKey(when) {
+  return `cron:${new Date(when).toISOString().slice(0, 16)}Z`;
+}
+
+/**
+ * Claim a firing. Returns whether this call won it, and the state to persist.
+ *
+ * The caller must write the returned state to disk BEFORE spawning anything.
+ * The previous code marked the fire in memory and saved only after every
+ * routine had finished, so a crash or a kill in between lost the claim and the
+ * next tick ran the same minute again. Aside makes this a unique index and
+ * spawns only if the insert took; this is the same shape without a database.
+ *
+ * Pure: the given state is not mutated, so "claimed" and "durable" stay
+ * distinguishable to the caller.
+ */
+export function claimFire(state, name, key) {
+  if (state?.[name]?.lastFireKey === key) return { claimed: false, state };
+  return {
+    claimed: true,
+    state: { ...state, [name]: { ...(state?.[name] ?? {}), lastFireKey: key } },
+  };
+}
+
 async function loadState() {
   try {
     return JSON.parse(await readFile(STATE, 'utf8'));
@@ -184,7 +219,7 @@ async function main() {
     process.exit(1);
   }
 
-  const state = await loadState();
+  let state = await loadState();
   let ran = 0;
 
   for (const file of files) {
@@ -207,9 +242,13 @@ async function main() {
         continue;
       }
       // A timer that fires late must not run a routine late. Skip, do not catch up.
-      const stamp = `${now.toISOString().slice(0, 13)}:${String(now.getMinutes()).padStart(2, '0')}`;
-      if (state[name]?.lastStamp === stamp) continue;
-      state[name] = { ...state[name], lastStamp: stamp };
+      const key = fireKey(now);
+      const claim = claimFire(state, name, key);
+      if (!claim.claimed) continue;
+      state = claim.state;
+      // Persisted BEFORE the run, not after the loop. A crash between here and
+      // the end used to lose the claim, and the next tick re-ran the minute.
+      if (!dry) await saveState(state);
     }
 
     console.log(`[routines] running ${name}${forced ? ' (forced)' : ''}`);

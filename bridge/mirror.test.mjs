@@ -175,3 +175,101 @@ test('a record we write ourselves is held to the same allowlist', async () => {
   assert.equal(written.includes('do the thing'), true);
   assert.equal(written.includes('hook_started'), false);
 });
+
+// --- keeping transcripts to a sane size --------------------------------------
+
+import { trimRecord, TOOL_RESULT_LIMIT } from './mirror.mjs';
+
+const big = 'x'.repeat(TOOL_RESULT_LIMIT + 500);
+
+test('a long tool result is cut, and says how much was dropped', () => {
+  const out = trimRecord({
+    type: 'user',
+    message: { content: [{ type: 'tool_result', content: big }] },
+  });
+  const kept = out.message.content[0].content;
+  assert.ok(kept.length < big.length);
+  assert.match(kept, /500 more characters not kept/);
+});
+
+test('an image in a tool result is replaced by a note', () => {
+  // Base64 screenshots were the single largest thing in a real transcript.
+  const out = trimRecord({
+    type: 'user',
+    message: {
+      content: [{ type: 'tool_result', content: [{ type: 'image', source: { data: 'AAAA' } }] }],
+    },
+  });
+  assert.deepEqual(out.message.content[0].content[0], {
+    type: 'text',
+    text: '[image not kept, 4 characters of base64]',
+  });
+});
+
+test('text blocks inside a tool result are cut too', () => {
+  const out = trimRecord({
+    type: 'user',
+    message: { content: [{ type: 'tool_result', content: [{ type: 'text', text: big }] }] },
+  });
+  assert.ok(out.message.content[0].content[0].text.length < big.length);
+});
+
+test('thinking, tool_use and text are kept whole', () => {
+  // Together they were 162KB of a 17.4MB file. They are what the turn was.
+  const rec = {
+    type: 'assistant',
+    message: {
+      content: [
+        { type: 'thinking', thinking: big },
+        { type: 'tool_use', input: { query: big } },
+        { type: 'text', text: big },
+      ],
+    },
+  };
+  assert.equal(trimRecord(rec), rec, 'nothing to trim means no copy at all');
+});
+
+test('a record with nothing to trim is returned as-is, not copied', () => {
+  const rec = { type: 'result', subtype: 'success', result: 'ok' };
+  assert.equal(trimRecord(rec), rec);
+});
+
+test('trimming never mutates the object the caller reads back', () => {
+  const rec = { type: 'user', message: { content: [{ type: 'tool_result', content: big }] } };
+  trimRecord(rec);
+  assert.equal(rec.message.content[0].content.length, big.length);
+});
+
+test('the mirror writes the trimmed line, not the original', async () => {
+  const path = join(await tmp(), 'trim.jsonl');
+  const m = createMirror();
+  m.take(obj({ type: 'user', message: { content: [{ type: 'tool_result', content: big }] } }));
+  await m.writeTo(path);
+  const written = await readFile(path, 'utf8');
+  assert.ok(written.length < big.length, `wrote ${written.length} bytes`);
+  assert.match(written, /more characters not kept/);
+});
+
+test('the duplicate payload the record carries alongside is dropped', () => {
+  // The stream stores a tool result twice: once where the model saw it, and
+  // again in a top-level tool_use_result. Trimming only the first cut a real
+  // 16.6MB transcript to 8.55MB; dropping both took it to 0.44MB.
+  const out = trimRecord({
+    type: 'user',
+    message: { content: [{ type: 'tool_result', content: big }] },
+    tool_use_result: { stdout: big },
+  });
+  assert.equal('tool_use_result' in out, false);
+});
+
+test('a record whose only bulk is the duplicate is still trimmed', () => {
+  const out = trimRecord({ type: 'user', message: { content: 'hi' }, tool_use_result: { stdout: big } });
+  assert.equal('tool_use_result' in out, false);
+  assert.equal(out.message.content, 'hi');
+});
+
+test('dropping the duplicate does not mutate what the caller reads back', () => {
+  const rec = { type: 'user', message: { content: [] }, tool_use_result: { stdout: 'x' } };
+  trimRecord(rec);
+  assert.equal('tool_use_result' in rec, true);
+});

@@ -77,6 +77,75 @@ export function resultOf(objects) {
 }
 
 /**
+ * How much of a tool result to keep.
+ *
+ * Enough to see what came back when reading a turn later, nowhere near enough
+ * to hold a page snapshot. Measured on a real browsing session: tool results
+ * were 8.5MB of the 8.67MB of block content, averaging 89KB each, and the file
+ * came to 17.4MB for five turns. Everything else - thinking, tool_use, text -
+ * totalled 162KB and is kept whole.
+ *
+ * This transcript is not what `claude --resume` replays; Claude Code keeps its
+ * own copy for that. Ours exists to be listed and indexed, and neither needs
+ * the bytes of a page.
+ */
+export const TOOL_RESULT_LIMIT = 2000;
+
+function trimText(text) {
+  if (typeof text !== 'string' || text.length <= TOOL_RESULT_LIMIT) return text;
+  return `${text.slice(0, TOOL_RESULT_LIMIT)}\n… [${text.length - TOOL_RESULT_LIMIT} more characters not kept]`;
+}
+
+/** One block of a tool result, cut to size. Images go entirely. */
+function trimResultBlock(block) {
+  if (block?.type === 'image') {
+    // Base64 screenshots, the single largest thing in a transcript. A note
+    // that one was returned is worth keeping; the pixels are not.
+    const bytes = block?.source?.data?.length ?? 0;
+    return { type: 'text', text: `[image not kept, ${bytes} characters of base64]` };
+  }
+  if (typeof block?.text === 'string') return { ...block, text: trimText(block.text) };
+  return block;
+}
+
+/**
+ * A copy of a record with its tool results cut down.
+ *
+ * Two places hold the payload, and both must go or neither is worth doing.
+ * `message.content[].tool_result` is the one the model saw, and the record
+ * ALSO carries a top-level `tool_use_result` holding the same bytes again.
+ * Trimming only the first halved a real transcript where it should have cut
+ * 95% of it; the duplicate is dropped outright, since a transcript we keep for
+ * listing and indexing has no use for either copy of a page.
+ *
+ * Returns the original object when nothing needs trimming, so the common case
+ * copies nothing. Never mutates its input: the caller reads the parsed object
+ * back for the run's result.
+ */
+export function trimRecord(obj) {
+  const content = obj?.message?.content;
+  const hasResult = Array.isArray(content) && content.some((b) => b?.type === 'tool_result');
+  const hasDuplicate = obj != null && typeof obj === 'object' && 'tool_use_result' in obj;
+  if (!hasResult && !hasDuplicate) return obj;
+
+  const { tool_use_result: _dropped, ...rest } = obj;
+  if (!hasResult) return rest;
+
+  return {
+    ...rest,
+    message: {
+      ...obj.message,
+      content: content.map((b) => {
+        if (b?.type !== 'tool_result') return b;
+        if (typeof b.content === 'string') return { ...b, content: trimText(b.content) };
+        if (Array.isArray(b.content)) return { ...b, content: b.content.map(trimResultBlock) };
+        return b;
+      }),
+    },
+  };
+}
+
+/**
  * Collect one turn's transcript lines.
  *
  * Deliberately synchronous. An earlier version opened the file first and only
@@ -105,7 +174,10 @@ export function createMirror() {
       } catch {
         return null;
       }
-      if (keepLine(obj)) kept.push(line);
+      if (keepLine(obj)) {
+        const trimmed = trimRecord(obj);
+        kept.push(trimmed === obj ? line : JSON.stringify(trimmed));
+      }
       return obj;
     },
 
@@ -120,7 +192,7 @@ export function createMirror() {
      * same shape, so ours stays readable by the same code.
      */
     record(obj) {
-      if (keepLine(obj)) kept.push(JSON.stringify(obj));
+      if (keepLine(obj)) kept.push(JSON.stringify(trimRecord(obj)));
       return obj;
     },
 

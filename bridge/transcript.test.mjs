@@ -10,19 +10,19 @@ const userBlocks = (text) =>
 const assistantText = (text) =>
   line({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] } });
 
-const PERSONA = 'You are Hammock, Boa Hancock from One Piece. Rafli is Luffy: the one person';
+const PERSONA = 'You are Hammock, Boa Hancock from One Piece. Your operator is Luffy: the one person';
 
 /**
  * The real shape, read off a live transcript: the bridge joins persona, task
  * and Slack context with `---` rules. Guessing "the last paragraph" gave every
  * session the same task, because that is the persona's closing line.
  */
-const prompt = (task, ctx = 'You are replying in Slack channel `C0BNS4YPJSW`, thread `1788685900.768339`.') =>
+const prompt = (task, ctx = 'You are replying in Slack channel `C01EXAMPLE1`, thread `1788685900.768339`.') =>
   [PERSONA, task, ctx].join('\n\n---\n\n');
 
 test('the task is the section between the rules, not the persona', () => {
-  const s = summarise('abc', [userText(prompt('Check the A1C price')), assistantText('ok')].join('\n'));
-  assert.equal(s.task, 'Check the A1C price');
+  const s = summarise('abc', [userText(prompt('Check the coffee price')), assistantText('ok')].join('\n'));
+  assert.equal(s.task, 'Check the coffee price');
 });
 
 test('two different sessions get two different tasks', () => {
@@ -45,7 +45,7 @@ test('content given as blocks reads the same as a plain string', () => {
 
 test('slackContext finds the channel and thread the run replied in', () => {
   const ctx = slackContext(prompt('anything'));
-  assert.deepEqual(ctx, { channel: 'C0BNS4YPJSW', threadTs: '1788685900.768339' });
+  assert.deepEqual(ctx, { channel: 'C01EXAMPLE1', threadTs: '1788685900.768339' });
 });
 
 test('slackContext returns null when the prompt names no thread', () => {

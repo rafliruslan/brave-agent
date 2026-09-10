@@ -14,7 +14,7 @@ composer until it broke in a reproducible way.
 # <routine name>
 
 **Schedule:** twice daily, 11:00 and 16:00 WITA
-**Reports to:** #operations (C09DE2ZTLP7), thread 1786440953.115899
+**Reports to:** #operations (C02EXAMPLE2), thread 1786440953.115899
 **Scope:** notify only. Do not approve or deny.
 
 ## How to run it

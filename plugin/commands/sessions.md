@@ -15,10 +15,11 @@ node "${CLAUDE_PLUGIN_ROOT}/../bridge/sessions-cli.mjs" -n 20
 ```
 
 If the plugin is installed rather than run from a clone, `bridge/` is not
-beside it. Use the checkout instead:
+beside it. Use the checkout instead, at wherever you cloned it - the README
+installs to `~/.local/share/brave-agent`:
 
 ```bash
-node ~/Documents/A1C/agent/brave-agent/bridge/sessions-cli.mjs -n 20
+node ~/.local/share/brave-agent/bridge/sessions-cli.mjs -n 20
 ```
 
 Two environment variables shape the output, both optional:

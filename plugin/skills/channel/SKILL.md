@@ -37,7 +37,7 @@ const api = async (method, body) => {
 await api('conversations.replies', { channel, ts: threadTs, limit: 50 });   // this thread
 await api('conversations.history', { channel, limit: 50 });                 // the channel
 await api('conversations.info',    { channel });                            // name, privacy, membership
-await api('users.info',            { user: 'U08GZ0APDKL' });                // display name, tz, admin
+await api('users.info',            { user: 'U01EXAMPLE1' });                // display name, tz, admin
 ```
 
 Participants are the distinct `user` values in `conversations.replies`. There is
@@ -112,7 +112,7 @@ reply can arrive as a task: you are already in that conversation.
 ## Two identities, one thread
 
 Your reply is posted by the bot and shows as an app. Anything you do through
-the browser is done as Rafli and carries no bot label.
+the browser is done as the operator and carries no bot label.
 
 So a message you send through the browser will not appear in the bot's own
 history, and querying with the bot token returns nothing. That is the wrong

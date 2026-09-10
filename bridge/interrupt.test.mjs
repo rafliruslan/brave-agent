@@ -34,7 +34,7 @@ test('a ! in the middle of a sentence is not an interrupt', () => {
 
 test('a leading mention is stripped before looking', () => {
   // app_mention text arrives with the bot id in front of it.
-  assert.deepEqual(parseInterrupt('<@U0BPLEDEF40> !stop'), { stop: true, prompt: null });
+  assert.deepEqual(parseInterrupt('<@U02EXAMPLEB> !stop'), { stop: true, prompt: null });
 });
 
 test('an empty or missing message is not an interrupt', () => {
@@ -61,14 +61,14 @@ test('"stop" without the marker is an ordinary message', () => {
 // the task. Observed live.
 
 test('a stop survives a trailing attribution line', () => {
-  assert.deepEqual(parseInterrupt('!stop\n*Sent using* <@U0A8UAU3P3Q>'), {
+  assert.deepEqual(parseInterrupt('!stop\n*Sent using* <@U03EXAMPLEC>'), {
     stop: true,
     prompt: null,
   });
 });
 
 test('a bare ! survives a trailing attribution line', () => {
-  assert.deepEqual(parseInterrupt('!\n*Sent using* <@U0A8UAU3P3Q>'), { stop: true, prompt: null });
+  assert.deepEqual(parseInterrupt('!\n*Sent using* <@U03EXAMPLEC>'), { stop: true, prompt: null });
 });
 
 test('a multi-line instruction is still steered, in full', () => {
@@ -83,18 +83,18 @@ test('a stop survives the attribution appended INLINE', () => {
   // The actual observed form, logged off a live event. It is appended with a
   // space, not a newline, so a first-line rule cannot see it - which is why
   // the first fix for this did not work and the second test was needed.
-  assert.deepEqual(parseInterrupt('!stop *Sent using* <@U0A8UAU3P3Q>'), {
+  assert.deepEqual(parseInterrupt('!stop *Sent using* <@U03EXAMPLEC>'), {
     stop: true,
     prompt: null,
   });
 });
 
 test('a bare ! survives the inline attribution', () => {
-  assert.deepEqual(parseInterrupt('! *Sent using* <@U0A8UAU3P3Q>'), { stop: true, prompt: null });
+  assert.deepEqual(parseInterrupt('! *Sent using* <@U03EXAMPLEC>'), { stop: true, prompt: null });
 });
 
 test('a steered instruction loses the attribution but keeps the instruction', () => {
-  assert.deepEqual(parseInterrupt('!check the inbox *Sent using* <@U0A8UAU3P3Q>'), {
+  assert.deepEqual(parseInterrupt('!check the inbox *Sent using* <@U03EXAMPLEC>'), {
     stop: false,
     prompt: 'check the inbox',
   });

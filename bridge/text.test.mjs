@@ -13,9 +13,9 @@ test('toSlackText leaves single-asterisk bold alone', () => {
 });
 
 test('toSlackText strips Markdown image tags', () => {
-  const out = toSlackText('Here it is\n![Monday](/Users/rafli/.aside/u/0/tmp/mon.png)\ndone');
+  const out = toSlackText('Here it is\n![Monday](/Users/someone/.aside/u/0/tmp/mon.png)\ndone');
   assert.ok(!out.includes('!['));
-  assert.ok(!out.includes('/Users/rafli'));
+  assert.ok(!out.includes('/Users/someone'));
   assert.match(out, /Here it is/);
   assert.match(out, /done/);
 });
@@ -222,7 +222,7 @@ test('toSlackText does not mangle versions or filenames outside bold', () => {
   assert.equal(toSlackText('app v1.13.0 in runner.mjs'), 'app v1.13.0 in runner.mjs');
 });
 
-// Em dashes are banned in all of Rafli's writing and she kept using them.
+// Em dashes are banned in the operator's writing and she kept using them.
 test('toSlackText replaces an em dash with a comma', () => {
   assert.equal(toSlackText('Sprint Review — you have not RSVP’d'), 'Sprint Review, you have not RSVP’d');  // em-dash-ok: the em dash is the input under test
 });
@@ -315,11 +315,11 @@ test('isDeadSession covers an evicted session too', () => {
 // nothing for anyone using that app. parseInterrupt had the same bug.
 
 test('stripAttribution removes the inline suffix', () => {
-  assert.equal(stripAttribution('stop *Sent using* <@U0A8UAU3P3Q>'), 'stop');
+  assert.equal(stripAttribution('stop *Sent using* <@U03EXAMPLEC>'), 'stop');
 });
 
 test('stripAttribution removes it on its own line too', () => {
-  assert.equal(stripAttribution('stop\n*Sent using* <@U0A8UAU3P3Q>'), 'stop');
+  assert.equal(stripAttribution('stop\n*Sent using* <@U03EXAMPLEC>'), 'stop');
 });
 
 test('stripAttribution leaves an ordinary message alone', () => {

@@ -41,9 +41,9 @@ test('parseInline builds a bare link', () => {
 
 // A mention must stay a real mention, not the raw id.
 test('parseInline builds a user mention', () => {
-  assert.deepEqual(parseInline('hi <@U08GZ0APDKL>'), [
+  assert.deepEqual(parseInline('hi <@U01EXAMPLE1>'), [
     { type: 'text', text: 'hi ' },
-    { type: 'user', user_id: 'U08GZ0APDKL' },
+    { type: 'user', user_id: 'U01EXAMPLE1' },
   ]);
 });
 

@@ -6,8 +6,8 @@ import { join } from 'node:path';
 import { createSubscriptionStore, shouldHandle, isStopPhrase, canInterrupt } from './subscriptions.mjs';
 
 const BOT = 'UBOT1';
-const RAFLI = 'URAFLI';
-const base = (over = {}) => ({ user: RAFLI, thread_ts: '1.0', ts: '1.5', text: 'and the other one?', ...over });
+const OPERATOR = 'UEXAMPLE';
+const base = (over = {}) => ({ user: OPERATOR, thread_ts: '1.0', ts: '1.5', text: 'and the other one?', ...over });
 
 async function withStore(fn, opts = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'brave-subs-'));
@@ -19,44 +19,44 @@ async function withStore(fn, opts = {}) {
 }
 
 test('a followed thread is handled', () => {
-  assert.equal(shouldHandle(base(), { botUserId: BOT, allowedUser: RAFLI, subscribed: true }), true);
+  assert.equal(shouldHandle(base(), { botUserId: BOT, allowedUser: OPERATOR, subscribed: true }), true);
 });
 
 test('an unfollowed thread is ignored', () => {
-  assert.equal(shouldHandle(base(), { botUserId: BOT, allowedUser: RAFLI, subscribed: false }), false);
+  assert.equal(shouldHandle(base(), { botUserId: BOT, allowedUser: OPERATOR, subscribed: false }), false);
 });
 
 // Slack sends a mention as both app_mention and message.*, so handling it here
 // too would run the task twice and post two answers.
 test('a message containing a mention is left to app_mention', () => {
   const e = base({ text: `<@${BOT}> do it again` });
-  assert.equal(shouldHandle(e, { botUserId: BOT, allowedUser: RAFLI, subscribed: true }), false);
+  assert.equal(shouldHandle(e, { botUserId: BOT, allowedUser: OPERATOR, subscribed: true }), false);
 });
 
 test('the agent never answers itself', () => {
-  assert.equal(shouldHandle(base({ user: BOT }), { botUserId: BOT, allowedUser: RAFLI, subscribed: true }), false);
-  assert.equal(shouldHandle(base({ bot_id: 'B1' }), { botUserId: BOT, allowedUser: RAFLI, subscribed: true }), false);
+  assert.equal(shouldHandle(base({ user: BOT }), { botUserId: BOT, allowedUser: OPERATOR, subscribed: true }), false);
+  assert.equal(shouldHandle(base({ bot_id: 'B1' }), { botUserId: BOT, allowedUser: OPERATOR, subscribed: true }), false);
 });
 
 test('anyone other than the allowed user is ignored', () => {
-  assert.equal(shouldHandle(base({ user: 'USOMEONE' }), { botUserId: BOT, allowedUser: RAFLI, subscribed: true }), false);
+  assert.equal(shouldHandle(base({ user: 'USOMEONE' }), { botUserId: BOT, allowedUser: OPERATOR, subscribed: true }), false);
 });
 
 // Edits and joins would otherwise re-run a task that already ran.
 test('edits, deletions and joins are ignored', () => {
   for (const subtype of ['message_changed', 'message_deleted', 'channel_join', 'thread_broadcast']) {
-    assert.equal(shouldHandle(base({ subtype }), { botUserId: BOT, allowedUser: RAFLI, subscribed: true }), false, subtype);
+    assert.equal(shouldHandle(base({ subtype }), { botUserId: BOT, allowedUser: OPERATOR, subscribed: true }), false, subtype);
   }
 });
 
 test('a file share still counts as a message', () => {
-  assert.equal(shouldHandle(base({ subtype: 'file_share' }), { botUserId: BOT, allowedUser: RAFLI, subscribed: true }), true);
+  assert.equal(shouldHandle(base({ subtype: 'file_share' }), { botUserId: BOT, allowedUser: OPERATOR, subscribed: true }), true);
 });
 
 // Starting a conversation still requires a mention.
 test('a top-level message is never handled', () => {
-  assert.equal(shouldHandle(base({ thread_ts: undefined }), { botUserId: BOT, allowedUser: RAFLI, subscribed: true }), false);
-  assert.equal(shouldHandle(base({ thread_ts: '1.5', ts: '1.5' }), { botUserId: BOT, allowedUser: RAFLI, subscribed: true }), false);
+  assert.equal(shouldHandle(base({ thread_ts: undefined }), { botUserId: BOT, allowedUser: OPERATOR, subscribed: true }), false);
+  assert.equal(shouldHandle(base({ thread_ts: '1.5', ts: '1.5' }), { botUserId: BOT, allowedUser: OPERATOR, subscribed: true }), false);
 });
 
 test('a missing event is not handled', () => {

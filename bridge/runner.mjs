@@ -25,6 +25,7 @@
 
 import { spawn } from 'node:child_process';
 import { createMirror, splitLines, resultOf } from './mirror.mjs';
+import { appendRun, indexPathFor } from './runs-index.mjs';
 
 /** A turn that outruns this is killed. Browser work is genuinely slow. */
 export const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
@@ -242,6 +243,11 @@ export function runAgent({
       if (transcriptPath) {
         try {
           range = await mirror.writeTo(transcriptPath);
+          // Recorded here, in the one place that knows the range, rather than
+          // at each caller. The id is the one the transcript is named after,
+          // so the index and the file can never disagree about which session a
+          // turn belongs to.
+          await appendRun(indexPathFor(transcriptPath), { session: sessionId, ...range });
         } catch (err) {
           console.error(`[runner] transcript mirror failed: ${err.message}`);
         }

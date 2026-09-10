@@ -19,6 +19,7 @@ import { join, basename } from 'node:path';
 import { summarise, threadIndex, relativeAge, chooseTranscripts } from './transcript.mjs';
 import { DEFAULT_STATE_PATH } from './sessions.mjs';
 import { transcriptPathFor } from './mirror.mjs';
+import { readIndex, groupBySession, readRange, indexPathIn } from './runs-index.mjs';
 
 const WORKSPACE = process.env.AGENT_WORKSPACE
   || join(homedir(), '.local', 'share', 'brave-agent', 'workspace');
@@ -99,15 +100,34 @@ async function main() {
   }
   const index = threadIndex(threads);
 
+  // Where each turn's bytes are, for the transcripts we wrote ourselves.
+  // Claude Code's have no index, so those still read whole.
+  const runs = groupBySession(await readIndex(indexPathIn(WORKSPACE)));
+
   const rows = [];
   for (const [id, { path, source }] of found) {
     const { mtimeMs } = await stat(path);
-    const s = summarise(id, await readFile(path, 'utf8').catch(() => ''));
+    const turnsOf = runs.get(id);
+
+    // The task line lives in the first turn, so read that turn and nothing
+    // else. Reading the whole file to render 100 characters was the thing
+    // worth fixing, and it only gets worse the longer a thread runs.
+    const text = turnsOf?.length
+      ? await readRange(path, turnsOf[0].offset, turnsOf[0].bytes)
+      : await readFile(path, 'utf8').catch(() => '');
+    const s = summarise(id, text);
+
+    // How many times the agent ran, which is what a turn is. Counting
+    // assistant messages showed "183 turns" for a session that had run five
+    // times. Only the indexed sessions can know this; the rest keep the count
+    // summarise derives.
+    const turns = turnsOf?.length ?? s.turns;
+
     // Prefer the channel and thread the prompt names: it carries the channel
     // too, and it survives threads.json's weekly prune. The hash index is the
     // fallback for a transcript whose prompt did not say.
     const threadTs = s.slack?.threadTs || index[id] || null;
-    rows.push({ ...s, when: mtimeMs, threadTs, source, channel: s.slack?.channel || null });
+    rows.push({ ...s, turns, when: mtimeMs, threadTs, source, channel: s.slack?.channel || null });
   }
   rows.sort((a, b) => b.when - a.when);
   const shown = rows.slice(0, args.limit);

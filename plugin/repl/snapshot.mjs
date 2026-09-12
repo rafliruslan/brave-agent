@@ -13,8 +13,16 @@
  * server you are about to act with.
  */
 
-/** Runs inside the page. Must be self-contained: no imports, no closures. */
-export function collect(prevSerial) {
+/**
+ * Runs inside the page. Must be self-contained: no imports, no closures.
+ *
+ * Takes a single object because page.evaluate passes exactly one argument and
+ * serialises this function to run it; a second parameter would silently arrive
+ * undefined.
+ */
+export function collect(input) {
+  const { prevSerial = null, options } = input || {};
+  const opts = options || {};
   const ROLE_BY_TAG = {
     A: 'link', BUTTON: 'button', INPUT: 'textbox', TEXTAREA: 'textbox',
     SELECT: 'combobox', IMG: 'img', H1: 'heading', H2: 'heading', H3: 'heading',
@@ -27,6 +35,14 @@ export function collect(prevSerial) {
     checkbox: 'checkbox', radio: 'radio', submit: 'button', button: 'button',
     range: 'slider', file: 'button', search: 'searchbox',
   };
+
+  // What you can actually click, type into, or focus. Everything else is
+  // scaffolding that tells you where you are, which is worth paying for on the
+  // first read of a page and not on the reads after it.
+  const INTERACTIVE = new Set([
+    'link','button','textbox','combobox','checkbox','radio','slider','searchbox',
+    'tab','menuitem','option',
+  ]);
 
   // Elements worth a ref even with no accessible name: containers give the tree
   // its shape, and an unnamed button is exactly the thing you need to click.
@@ -135,6 +151,19 @@ export function collect(prevSerial) {
     return bits;
   }
 
+  // Resolve the scope BEFORE clearing, since the ref being scoped to is one of
+  // the tags about to be removed. A ref that has already expired is reported
+  // rather than silently widened to the whole page, which would return the
+  // opposite of what was asked for at the worst possible moment.
+  let root = document.body;
+  if (opts.ref) {
+    const found = document.querySelector(`[data-bref="${String(opts.ref).replace(/"/g, '')}"]`);
+    if (!found) {
+      return { serial: '', count: 0, url: location.href, title: document.title, diff: null, missingRef: opts.ref };
+    }
+    root = found;
+  }
+
   // Clear tags from the previous snapshot so refs never silently outlive it.
   for (const old of document.querySelectorAll('[data-bref]')) old.removeAttribute('data-bref');
 
@@ -148,7 +177,11 @@ export function collect(prevSerial) {
     const shown = onScreen(el);
     let emitted = false;
 
-    if (shown && role && INTERESTING.has(role)) {
+    const wanted = opts.interactive
+      ? INTERACTIVE.has(role) || el.tabIndex >= 0
+      : INTERESTING.has(role);
+
+    if (shown && role && wanted) {
       const ref = `e${++n}`;
       el.setAttribute('data-bref', ref);
       const name = nameOf(el);
@@ -163,7 +196,7 @@ export function collect(prevSerial) {
     for (const child of el.children) walk(child, emitted ? depth + 1 : depth);
   }
 
-  walk(document.body, 0);
+  walk(root, 0);
   const serial = lines.join('\n');
 
   // Line-level diff. Cheap, and enough: a follow-up call usually needs to know
@@ -177,5 +210,13 @@ export function collect(prevSerial) {
     diff = { added, removed, unchanged: lines.length - added.length };
   }
 
-  return { serial, count: n, url: location.href, title: document.title, diff };
+  return {
+    serial,
+    count: n,
+    url: location.href,
+    title: document.title,
+    diff,
+    scoped: opts.ref || null,
+    interactive: Boolean(opts.interactive),
+  };
 }

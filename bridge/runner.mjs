@@ -27,8 +27,14 @@ import { spawn } from 'node:child_process';
 import { createMirror, splitLines, resultOf } from './mirror.mjs';
 import { appendRun, indexPathFor } from './runs-index.mjs';
 
-/** A turn that outruns this is killed. Browser work is genuinely slow. */
-export const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
+/**
+ * A turn that outruns this is killed. Browser work is genuinely slow.
+ *
+ * 15 minutes, matching what Aside allows per task in its own benchmark runs.
+ * Ten was this codebase's guess; theirs is the number a 297/300 result was
+ * measured with, on the same kind of live-website work.
+ */
+export const DEFAULT_TIMEOUT_MS = 15 * 60 * 1000;
 
 /**
  * Claude Code says this when a `--resume` target is gone. The Mac hit the same

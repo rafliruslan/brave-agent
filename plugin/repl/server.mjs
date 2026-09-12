@@ -192,16 +192,28 @@ async function runStep(page, step, i) {
   }
 }
 
-async function snapshotPage(page, mode) {
+async function snapshotPage(page, mode, options = {}) {
   const prev = mode === 'diff' ? lastSerial.get(page.url()) ?? null : null;
-  const r = await page.evaluate(collect, prev);
-  lastSerial.set(r.url, r.serial);
+  const r = await page.evaluate(collect, { prevSerial: prev, options });
+  // A scoped or filtered read is a partial view of the page, so it must not
+  // become the baseline a later diff is measured against - that would report
+  // the rest of the page as having appeared.
+  if (!options.ref && !options.interactive) lastSerial.set(r.url, r.serial);
   page._brTitle = r.title;
   return r;
 }
 
 function renderSnapshot(r, mode) {
-  const head = `${r.title}\n${r.url}\n${r.count} refs`;
+  if (r.missingRef) {
+    return `Ref ${r.missingRef} is gone: the page has been snapshotted again since, or it has changed. Take a full snapshot and scope to a current ref.`;
+  }
+  const notes = [
+    r.scoped ? `scoped to ${r.scoped}` : null,
+    r.interactive ? 'interactive (clickable / focusable) elements only' : null,
+  ].filter(Boolean);
+  const head =
+    `${r.title}\n${r.url}\n${r.count} refs` +
+    (notes.length ? `\nnote: ${notes.join(', ')}` : '');
   if (mode === 'diff' && r.diff) {
     const { added, removed, unchanged } = r.diff;
     if (!added.length && !removed.length) return `${head}\n\nNo change since the last snapshot.`;
@@ -218,12 +230,14 @@ const TOOLS = [
   {
     name: 'snapshot',
     description:
-      'Accessibility tree of a page with stable [ref=eNN] ids. mode "diff" returns only what appeared and disappeared since your last snapshot of that page, which is usually a fraction of the size, measured at 190 bytes against a 5.5KB full tree. Use diff for every read after the first. These refs work only with this server; mcp__brave__ and mcp__devtools__ each use their own.',
+      'Accessibility tree of a page with stable [ref=eNN] ids. mode "diff" returns only what appeared and disappeared since your last snapshot of that page, which is usually a fraction of the size, measured at 190 bytes against a 5.5KB full tree. Use diff for every read after the first. `ref` narrows to one subtree and `interactive` drops everything you cannot act on; unlike diff they both work on a first read, which is what you want after opening a menu or a dialog. These refs work only with this server; mcp__brave__ and mcp__devtools__ each use their own.',
     inputSchema: {
       type: 'object',
       properties: {
         page: { type: ['string', 'number'], description: 'URL substring, title substring, or index. Defaults to the page you last snapshotted.' },
         mode: { type: 'string', enum: ['full', 'diff'], default: 'full' },
+        ref: { type: 'string', description: 'Return only the subtree under this ref, e.g. "e276". For reading a menu, dialog or result list you just opened without paying for the page around it. The ref must come from your most recent snapshot of this page.' },
+        interactive: { type: 'boolean', description: 'Keep only what can be clicked, typed into or focused, dropping headings, images and layout containers. Pair with ref to read a panel you are about to act in.' },
       },
     },
   },
@@ -288,8 +302,29 @@ const server = new Server({ name: 'brave-repl', version: '0.1.0' }, { capabiliti
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
 
+/**
+ * How much a result costs to read, and how long it took to get.
+ *
+ * Aside puts `tokens_used` and `elapsed_time` on every tool result, and the
+ * effect is a model that can see which of its reads are expensive and shift to
+ * the cheaper ones. Characters/4 is the usual rough token estimate; it is an
+ * estimate and says so, since the real count depends on the tokeniser.
+ */
+function withCost(result, startedAt) {
+  const text = (result?.content || []).map((c) => c.text || '').join('');
+  const approx = Math.ceil(text.length / 4);
+  return {
+    ...result,
+    content: [
+      ...(result.content || []),
+      { type: 'text', text: `\n[~${approx} tokens, ${Date.now() - startedAt}ms]` },
+    ],
+  };
+}
+
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { name, arguments: args = {} } = req.params;
+  const startedAt = Date.now();
   try {
     const b = await connect();
 
@@ -298,13 +333,14 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       const rows = await Promise.all(
         pages.map(async (p, i) => `${i}: ${await p.title().catch(() => '?')} | ${p.url()}`),
       );
-      return { content: [{ type: 'text', text: rows.join('\n') }] };
+      return withCost({ content: [{ type: 'text', text: rows.join('\n') }] }, startedAt);
     }
 
     if (name === 'snapshot') {
       const page = await resolvePage(b, args.page);
-      const r = await snapshotPage(page, args.mode || 'full');
-      return { content: [{ type: 'text', text: renderSnapshot(r, args.mode || 'full') }] };
+      const mode = args.mode || 'full';
+      const r = await snapshotPage(page, mode, { ref: args.ref, interactive: args.interactive });
+      return withCost({ content: [{ type: 'text', text: renderSnapshot(r, mode) }], isError: Boolean(r.missingRef) }, startedAt);
     }
 
     if (name === 'fetch') {
@@ -345,10 +381,10 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       // A write that came back 4xx/5xx is the case most worth not glossing:
       // the agent should see it failed rather than read a body and move on.
       const bad = Boolean(res?.error) || (typeof res?.status === 'number' && res.status >= 400);
-      return {
+      return withCost({
         content: [{ type: 'text', text: isWrite(method) ? `${method} ${url}\n${text}` : text }],
         isError: bad,
-      };
+      }, startedAt);
     }
 
     if (name === 'act') {
@@ -394,7 +430,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 
       const content = [{ type: 'text', text: lines.join('\n') }];
       for (const s of shots) content.push({ type: 'image', data: s, mimeType: 'image/jpeg' });
-      return { content, isError: Boolean(failed) };
+      return withCost({ content, isError: Boolean(failed) }, startedAt);
     }
 
     throw new Error(`Unknown tool ${name}`);
